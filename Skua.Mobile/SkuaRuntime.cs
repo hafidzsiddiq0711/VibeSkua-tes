@@ -182,7 +182,9 @@ public static class SkuaRuntime
     /// <summary>Open skua-mobile.swf in the Artix Games Launcher's player, pointed at this Skua.</summary>
     public static void LaunchGame(Context context)
     {
-        Android.Net.Uri uri = Android.Net.Uri.Parse($"content://{SwfProvider.Authority}/{SwfFileName}")!;
+        // The address also rides in the URL query: Ruffle turns it into loaderInfo.parameters even
+        // when the player ignores the FLASHVARS extra for local (content://) files.
+        Android.Net.Uri uri = Android.Net.Uri.Parse($"content://{SwfProvider.Authority}/{SwfFileName}?skuaHost=127.0.0.1:{Port}")!;
         Intent intent = new(Intent.ActionView);
         intent.SetDataAndType(uri, "application/x-shockwave-flash");
         intent.SetClassName(ArtixPackage, ArtixPlayer);

@@ -36,6 +36,9 @@ public class SocketBridge {
     private var connected:Boolean = false;
     private var sticky:Object = {};
     private var retryTimer:Timer;
+    /** Addresses tried in turn until one answers (e.g. Skua Mobile on this phone, then the PC). */
+    private var candidates:Array = [];
+    private var candidateIndex:int = 0;
 
     private var ui:Sprite;
     private var input:TextField;
@@ -67,21 +70,33 @@ public class SocketBridge {
                 saved = String(so.data.host);
         } catch (e:Error) {
         }
-        // A flashvar / URL query (skua.swf?skuaHost=1.2.3.4) wins over the remembered host.
+        var param:String = "";
         try {
-            var param:* = root.loaderInfo.parameters["skuaHost"];
-            if (param != null && String(param).length > 0)
-                saved = String(param);
-        } catch (e2:Error) {
+            var p:* = root.loaderInfo.parameters["skuaHost"];
+            if (p != null)
+                param = String(p);
+        } catch (e3:Error) {
         }
-        buildUi(saved);
-        if (saved.length > 0)
-            connect(saved);
+
+        // skuaHost given (Skua Mobile): only that. Otherwise try Skua on this phone first,
+        // then the last PC address typed here, in turn, so nothing has to be typed.
+        if (param.length > 0)
+            candidates = [param];
+        else if (saved.length > 0 && saved != LOCAL)
+            candidates = [LOCAL, saved];
+        else
+            candidates = [LOCAL];
+        candidateIndex = 0;
+
+        buildUi(param.length > 0 ? param : (saved.length > 0 ? saved : LOCAL));
+        connect(candidates[0], false);
     }
+
+    private static const LOCAL:String = "127.0.0.1";
 
     // ---------------------------------------------------------------- connection
 
-    private function connect(address:String):void {
+    private function connect(address:String, remember:Boolean = true):void {
         address = address.replace(/^\s+|\s+$/g, "");
         if (address.length == 0) {
             setStatus("Ketik IP PC (lihat jendela Run-VibeSkua-Remote).");
@@ -95,11 +110,13 @@ public class SocketBridge {
             host = address;
             port = DEFAULT_PORT;
         }
-        try {
-            var so:SharedObject = SharedObject.getLocal("skuaBridge");
-            so.data.host = address;
-            so.flush();
-        } catch (e:Error) {
+        if (remember && address != LOCAL) {
+            try {
+                var so:SharedObject = SharedObject.getLocal("skuaBridge");
+                so.data.host = address;
+                so.flush();
+            } catch (e:Error) {
+            }
         }
         openSocket();
     }
@@ -166,6 +183,11 @@ public class SocketBridge {
         retryTimer = new Timer(RETRY_MS, 1);
         retryTimer.addEventListener(TimerEvent.TIMER_COMPLETE, function(e:TimerEvent):void {
             retryTimer = null;
+            if (candidates.length > 1) {
+                candidateIndex = (candidateIndex + 1) % candidates.length;
+                connect(candidates[candidateIndex], false);
+                return;
+            }
             openSocket();
         });
         retryTimer.start();
@@ -258,7 +280,7 @@ public class SocketBridge {
         title.y = 50;
         ui.addChild(title);
 
-        var hint:TextField = label("IP PC yang menjalankan VibeSkua (lihat jendela Run-VibeSkua-Remote):", 20, 0xFFFFFF);
+        var hint:TextField = label("Skua Mobile di HP ini: 127.0.0.1. VibeSkua di PC: ketik IP PC (lihat jendela Run-VibeSkua-Remote).", 20, 0xFFFFFF);
         hint.x = 60;
         hint.y = 130;
         hint.width = 840;
@@ -275,7 +297,7 @@ public class SocketBridge {
         input.y = 180;
         input.width = 560;
         input.height = 56;
-        input.text = saved.length > 0 ? saved : "192.168.";
+        input.text = saved;
         ui.addChild(input);
 
         var button:Sprite = new Sprite();
@@ -291,6 +313,8 @@ public class SocketBridge {
         button.x = 640;
         button.y = 180;
         button.addEventListener(MouseEvent.CLICK, function(e:MouseEvent):void {
+            candidates = [input.text];
+            candidateIndex = 0;
             connect(input.text);
         });
         ui.addChild(button);
@@ -302,7 +326,7 @@ public class SocketBridge {
         ui.addChild(status);
 
         root.addChild(ui);
-        setStatus(saved.length > 0 ? "" : "Ketik IP PC lalu tekan Sambungkan.");
+        setStatus("");
     }
 
     private function label(text:String, size:int, color:uint):TextField {
