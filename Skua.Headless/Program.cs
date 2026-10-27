@@ -71,6 +71,13 @@ async Task<int> SelfTest()
             .OrderBy(f => new FileInfo(f).Length)
             .Take(3)
             .ToList();
+        // Scripts whose //cs_include paths differ in letter case from the repo (Linux/Android are case-sensitive).
+        foreach (string rel in new[] { "Other/MergeShops/YulgarsUndineMerge.cs", "Other/FarmJoeKits/0FarmerJoeDoAll.cs" })
+        {
+            string full = Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(full))
+                candidates.Add(full);
+        }
         foreach (string path in candidates)
             failures += TryCompile(Path.GetRelativePath(dir, path), File.ReadAllText(path), path);
         if (candidates.Count == 0)

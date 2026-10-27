@@ -18,7 +18,8 @@ public class MainActivity : Activity
     private const uint Gold = 0xFFFDAF2D;
 
     private ISharedPreferences _prefs = null!;
-    private EditText _user = null!, _pass = null!, _server = null!;
+    private EditText _user = null!, _pass = null!;
+    private Android.Widget.Button _server = null!;
     private CheckBox _autoLogin = null!, _autoStart = null!;
     private TextView _status = null!, _script = null!, _log = null!;
     private ScrollView _logScroll = null!;
@@ -67,7 +68,7 @@ public class MainActivity : Activity
 
         _user = Field("Username AQW", _prefs.GetString("user", "")!, InputTypes.ClassText);
         _pass = Field("Password", _prefs.GetString("pass", "")!, InputTypes.ClassText | InputTypes.TextVariationPassword);
-        _server = Field("Server (mis. Twilly)", _prefs.GetString("server", "Twilly")!, InputTypes.ClassText);
+        _server = Button(ServerLabel(), PickServer);
         root.AddView(_user);
         root.AddView(_pass);
         root.AddView(_server);
@@ -152,6 +153,8 @@ public class MainActivity : Activity
         return row;
     }
 
+    private string ServerLabel() => $"Server: {_prefs.GetString("server", "Twilly")} ▾";
+
     private string ScriptLabel()
     {
         string s = _prefs.GetString("script", "")!;
@@ -183,7 +186,6 @@ public class MainActivity : Activity
         _prefs.Edit()!
             .PutString("user", _user.Text?.Trim() ?? "")!
             .PutString("pass", _pass.Text ?? "")!
-            .PutString("server", _server.Text?.Trim() ?? "Twilly")!
             .PutBoolean("autoLogin", _autoLogin.Checked)!
             .PutBoolean("autoStart", _autoStart.Checked)!
             .Apply();
@@ -311,6 +313,48 @@ public class MainActivity : Activity
                 _busy = false;
             }
         });
+    }
+
+    private void PickServer()
+    {
+        Toast("Mengambil daftar server …");
+        Task.Run(async () =>
+        {
+            List<Skua.Core.Models.Servers.Server> servers;
+            try
+            {
+                servers = await SkuaRuntime.EnsureStarted(this).GetServerListAsync();
+            }
+            catch (Exception e)
+            {
+                SkuaRuntime.AddLog($"Daftar server gagal: {e.Message}");
+                servers = new();
+            }
+            _ui.Post(() => ShowServerDialog(servers));
+        });
+    }
+
+    private void ShowServerDialog(List<Skua.Core.Models.Servers.Server> servers)
+    {
+        if (servers.Count == 0)
+        {
+            Toast("Daftar server belum bisa diambil. Buka game (MAIN) dulu lalu coba lagi.");
+            return;
+        }
+        string[] labels = servers.Select(s =>
+        {
+            string tags = (s.Upgrade ? " · Member" : "") + (s.Online ? "" : " · offline");
+            return $"{s.Name}  ({s.PlayerCount}/{s.MaxPlayers}){tags}";
+        }).ToArray();
+        new AlertDialog.Builder(this)
+            .SetTitle($"Pilih server ({servers.Count})")!
+            .SetItems(labels, (_, e) =>
+            {
+                _prefs.Edit()!.PutString("server", servers[e.Which].Name)!.Apply();
+                _server.Text = ServerLabel();
+            })!
+            .SetNegativeButton("Batal", (s, e) => { })!
+            .Show();
     }
 
     private void PickScript()

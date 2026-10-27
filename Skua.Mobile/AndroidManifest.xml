@@ -15,7 +15,8 @@
       android:label="Skua Mobile"
       android:icon="@android:drawable/sym_def_app_icon"
       android:allowBackup="false"
-      android:largeHeap="true">
+      android:largeHeap="true"
+      android:usesCleartextTraffic="true">
 
     <!-- Keeps Skua (scripts, login, relogin) alive while the game is in front. -->
     <service

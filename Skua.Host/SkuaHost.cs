@@ -7,6 +7,7 @@ using Skua.Core.GameProxy;
 using Skua.Core.Interfaces;
 using Skua.Core.Interfaces.Services;
 using Skua.Core.Models;
+using Skua.Core.Models.Servers;
 using Skua.Core.Options;
 using Skua.Core.Plugins;
 using Skua.Core.Scripts;
@@ -170,6 +171,12 @@ public sealed class SkuaHost : IDisposable
     public void Start()
     {
         HeadlessDialogService.Message += Say;
+        // Script log (bot.Log, [Relogin] ...) is what the desktop shows in its log window.
+        WeakReferenceMessenger.Default.Register<SkuaHost, Skua.Core.Messaging.AddLogMessage>(this, static (host, m) =>
+        {
+            if (m.LogType == LogType.Script)
+                host.Log?.Invoke(m.Text);
+        });
         _flash.FlashCall += OnFlashCall;
         _flash.InitializeFlash();
         Say($"Menunggu game (skua-mobile.swf) ...");
@@ -207,9 +214,27 @@ public sealed class SkuaHost : IDisposable
             await Task.Delay(250, token);
         }
 
+        if (string.IsNullOrWhiteSpace(server))
+            server = "Twilly";
         Bot.Servers.SetLoginInfo(username, password);
         Say($"Login {username} ke server {server} ...");
-        bool ok = await Task.Run(() => Bot.Servers.EnsureRelogin(string.IsNullOrWhiteSpace(server) ? "Twilly" : server), token);
+
+        List<Server> servers = await Bot.Servers.GetServers(true);
+        Say(servers.Count > 0 ? $"Daftar server: {servers.Count} server." : "Daftar server dari API AQW gagal diambil, pakai daftar dari game.");
+        if (servers.Count == 0)
+        {
+            // Without the API list EnsureRelogin has no candidates and never logs in. Log in first:
+            // the game then fills its own server list (serialCmd.servers), which Skua also uses.
+            Bot.Servers.Login(username, password);
+            for (int i = 0; i < 60 && Bot.Servers.ServerList.Count == 0; i++)
+            {
+                token.ThrowIfCancellationRequested();
+                await Task.Delay(250, token);
+            }
+            Say($"Server dari game: {Bot.Servers.ServerList.Count}.");
+        }
+
+        await Task.Run(() => Bot.Servers.EnsureRelogin(server), token);
 
         for (int i = 0; i < 80 && !Bot.Player.Playing; i++)
         {
@@ -217,9 +242,23 @@ public sealed class SkuaHost : IDisposable
             await Task.Delay(250, token);
         }
 
-        ok = Bot.Player.Playing;
+        bool ok = Bot.Player.Playing;
         Say(ok ? $"Masuk game sebagai {username}." : "Login gagal / belum masuk game.");
         return ok;
+    }
+
+    /// <summary>AQW servers (from the AQW API, else what the game has), online first.</summary>
+    public async Task<List<Server>> GetServerListAsync()
+    {
+        List<Server> servers = await Bot.Servers.GetServers(true);
+        if (servers.Count == 0)
+            servers = Bot.Servers.ServerList.ToList();
+        return servers
+            .Where(s => !string.IsNullOrWhiteSpace(s.Name))
+            .OrderByDescending(s => s.Online)
+            .ThenBy(s => s.Upgrade)
+            .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>Download new/outdated scripts from the Skua scripts repository (auqw/Scripts).</summary>

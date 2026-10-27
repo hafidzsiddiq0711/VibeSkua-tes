@@ -151,23 +151,27 @@ public partial class ScriptServers : ObservableRecipient, IScriptServers
         if (CachedServers.Count > 0 && !forceUpdate)
             return CachedServers;
 
-        try
+        // HTTPS first: Android blocks plain HTTP by default.
+        foreach (string url in new[] { "https://content.aq.com/game/api/data/servers", "http://content.aq.com/game/api/data/servers" })
         {
-            string response = await ValidatedHttpExtensions.GetStringAsync(HttpClients.GetGHClient()
-, $"http://content.aq.com/game/api/data/servers")
-                .ConfigureAwait(false);
+            try
+            {
+                string response = await ValidatedHttpExtensions.GetStringAsync(HttpClients.GetGHClient(), url)
+                    .ConfigureAwait(false);
 
-            List<Server>? servers = JsonConvert.DeserializeObject<List<Server>>(response);
-            if (servers == null || servers.Count == 0)
-                return new();
+                List<Server>? servers = JsonConvert.DeserializeObject<List<Server>>(response);
+                if (servers == null || servers.Count == 0)
+                    continue;
 
-            CachedServers = servers;
-            return CachedServers;
+                CachedServers = servers;
+                return CachedServers;
+            }
+            catch (Exception e)
+            {
+                System.Diagnostics.Trace.WriteLine($"Server list from {url} failed: {e.Message}");
+            }
         }
-        catch
-        {
-            return new();
-        }
+        return new();
     }
 
     public void SetLoginInfo(string username, string password)
