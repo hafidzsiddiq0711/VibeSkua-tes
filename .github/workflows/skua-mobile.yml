@@ -185,10 +185,22 @@ jobs:
           7z a -tzip SkuaServer-win-x64.zip SkuaServer >/dev/null
           ls -la SkuaServer-win-x64.zip
 
-      - name: Smoke test on Windows (server answers, rejects a wrong token)
+      - name: Server test on Windows (token, bots on demand, headless AQW)
         run: |
-          set -e
+          set -eo pipefail
+          ls -la SkuaServer/skua-ruffle.exe SkuaServer/skua-mobile.swf
           ./SkuaServer/skua-headless.exe servertest 2>&1 | tee servertest-win.log
+
+      - name: Report Windows server test as annotation
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          if os.path.exists("servertest-win.log"):
+              lines = open("servertest-win.log", encoding="utf-8", errors="replace").read().splitlines()
+              keep = [l for l in lines if "server " in l or "SERVERTEST" in l or "status:" in l or "rror" in l]
+              print("::notice title=servertest-windows::" + "\n".join(keep[-30:]).replace("%", "%25").replace("\n", "%0A"))
+          PY
 
       - uses: actions/upload-artifact@v4
         with:
