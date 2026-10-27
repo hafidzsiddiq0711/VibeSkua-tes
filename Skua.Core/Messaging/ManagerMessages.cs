@@ -20,7 +20,7 @@ public sealed record AddAccountToGroupMessage(IAccountItemViewModel Account);
 public sealed record AddTagsMessage(IAccountItemViewModel Account);
 public sealed record StartAccountMessage(IAccountItemViewModel Account, bool WithScript);
 public sealed record RemoveGroupMessage(IGroupItemViewModel Group);
-public sealed record StartGroupMessage(IGroupItemViewModel Group, bool WithScript);
+public sealed record StartGroupMessage(IGroupItemViewModel Group, bool WithScript, bool NewWindow = false);
 public sealed record RenameGroupMessage(IGroupItemViewModel Group);
 public sealed record RemoveAccountFromGroupMessage(IGroupItemViewModel Group, IAccountItemViewModel Account);
 public sealed record ReplaceAccountInGroupMessage(IGroupItemViewModel Group, IAccountItemViewModel CurrentAccount, IAccountItemViewModel ReplacementAccount);

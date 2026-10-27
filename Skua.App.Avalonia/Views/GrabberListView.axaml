@@ -16,7 +16,7 @@
   </UserControl.Resources>
 
   <!-- The window's 12px margin sits on the sidebar side; this side adds the rest -->
-  <Grid Margin="12,0,12,12" RowDefinitions="Auto,*,Auto" RowSpacing="10">
+  <Grid Margin="14,0,14,14" RowDefinitions="Auto,*,Auto" RowSpacing="12">
     <!-- Grab, search, multi-select -->
     <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
       <Button Grid.Column="0"
@@ -49,7 +49,7 @@
     </Grid>
 
     <!-- Grabbed items and the selected item's details -->
-    <Grid Grid.Row="1" ColumnDefinitions="*,10,220" RowDefinitions="Auto,*" RowSpacing="6">
+    <Grid Grid.Row="1" ColumnDefinitions="*,10,232" RowDefinitions="Auto,*" RowSpacing="8">
       <Grid Grid.Row="0" Grid.Column="0" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6" MinHeight="26">
         <TextBlock Grid.Column="0" Classes="section-label" Text="ITEMS" />
         <Border Grid.Column="1" Classes="count">
@@ -121,8 +121,8 @@
               Background="{DynamicResource SkuaSurfaceBrush}"
               BorderBrush="{DynamicResource SkuaBorderBrush}"
               BorderThickness="1"
-              CornerRadius="8"
-              Padding="8">
+              CornerRadius="10"
+              Padding="10">
         <controls:PropertyGridControl SelectedObject="{Binding SelectedItem}" />
       </Border>
     </Grid>

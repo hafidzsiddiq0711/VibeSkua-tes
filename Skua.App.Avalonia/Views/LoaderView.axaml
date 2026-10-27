@@ -8,7 +8,7 @@
              x:DataType="vms:LoaderViewModel"
              mc:Ignorable="d" d:DesignHeight="520" d:DesignWidth="720">
 
-  <Grid Margin="12" RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="10">
+  <Grid Margin="14" RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="12">
     <!-- Load a shop or quests by ID -->
     <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
       <ListBox Grid.Column="0" Classes="segmented" Width="136" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}">
@@ -73,8 +73,8 @@
             Background="{DynamicResource SkuaSurfaceBrush}"
             BorderBrush="{DynamicResource SkuaBorderBrush}"
             BorderThickness="1"
-            CornerRadius="8"
-            Padding="10,6,6,6">
+            CornerRadius="10"
+            Padding="12,8,8,8">
       <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto" ColumnSpacing="6">
         <TextBlock Grid.Column="0" Text="Update cache" FontSize="11" Foreground="{DynamicResource SkuaMutedTextBrush}" VerticalAlignment="Center" Margin="0,0,4,0"
                    IsVisible="{Binding !IsLoading}" />

@@ -48,9 +48,32 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
     private const int WM_NCACTIVATE = 0x0086;
+    private const int WM_WINDOWPOSCHANGED = 0x0047;
+    private const int WM_DPICHANGED = 0x02E0;
+    private const int WM_GETDPISCALEDSIZE = 0x02E4;
+    private const int WM_SKUA_CHILD_DPICHANGED = 0x0400 + 441;
 
     private SubclassProc? _subclassProc;
+    private bool _scalingCheckQueued;
 #endif
     private const int WM_SKUA_JUMP_MAP = 0x0400 + 449;
     private const int WM_SKUA_SET_OPTION = 0x0400 + 450;
@@ -387,6 +410,43 @@ public partial class MainWindow : Window
                     }
                 }
             }
+        }
+
+        // The tab host sizes this window to its tab area. On a monitor with another scale, keep that size instead of
+        // letting Windows scale it, and tell the host so it places the window again.
+        if (uMsg == WM_GETDPISCALEDSIZE && HotKeys.HostHwnd != IntPtr.Zero && lParam != IntPtr.Zero && GetWindowRect(hWnd, out RECT current))
+        {
+            Marshal.WriteInt32(lParam, 0, current.Right - current.Left);
+            Marshal.WriteInt32(lParam, 4, current.Bottom - current.Top);
+            return (IntPtr)1;
+        }
+        else if (uMsg == WM_DPICHANGED)
+        {
+            // Avalonia updates its size in DIPs only on WM_SIZE, which doesn't come when the size in pixels stays
+            // the same, so its next layout would resize the window to the old DIP size at the new scale. Give it
+            // the new DIP size of the suggested rect first.
+            uint newDpi = (uint)(wParam.ToInt64() & 0xFFFF);
+            if (newDpi > 0 && lParam != IntPtr.Zero)
+            {
+                RECT suggested = Marshal.PtrToStructure<RECT>(lParam);
+                Width = (suggested.Right - suggested.Left) * 96.0 / newDpi;
+                Height = (suggested.Bottom - suggested.Top) * 96.0 / newDpi;
+            }
+
+            IntPtr result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            if (HotKeys.HostHwnd != IntPtr.Zero)
+                PostMessage(HotKeys.HostHwnd, WM_SKUA_CHILD_DPICHANGED, hWnd, new IntPtr(Environment.ProcessId));
+            return result;
+        }
+        else if (uMsg == WM_WINDOWPOSCHANGED)
+        {
+            IntPtr result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            if (!_scalingCheckQueued)
+            {
+                _scalingCheckQueued = true;
+                Dispatcher.UIThread.Post(() => SyncScalingWithWindowDpi(hWnd), DispatcherPriority.Background);
+            }
+            return result;
         }
 
         if (uMsg == WM_SKUA_GRIDVIEW)
@@ -767,6 +827,36 @@ public partial class MainWindow : Window
         }
         
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // Avalonia's Position setter reads the new monitor's DPI into the window without raising ScalingChanged, so
+    // the mouse can be mapped at one scale while layout and drawing use another (clicks land beside the buttons).
+    // When either scale disagrees with the DPI Windows gives this window, replay WM_DPICHANGED with that DPI and
+    // the current rect: Avalonia then updates both, and the window keeps its size.
+    private void SyncScalingWithWindowDpi(IntPtr hWnd)
+    {
+        _scalingCheckQueued = false;
+        uint dpi = GetDpiForWindow(hWnd);
+        if (dpi == 0 || !GetWindowRect(hWnd, out RECT current))
+            return;
+
+        // On Windows, DesktopScaling is the scale Avalonia maps the mouse with; RenderScaling is the one layout uses.
+        double windowScaling = dpi / 96.0;
+        double inputScaling = DesktopScaling;
+        if (Math.Abs(RenderScaling - windowScaling) < 0.001 && Math.Abs(inputScaling - windowScaling) < 0.001)
+            return;
+
+        Trace.WriteLine($"VibeSkua scaling resync: layout {RenderScaling}, input {inputScaling}, window DPI {dpi}");
+        IntPtr rect = Marshal.AllocHGlobal(Marshal.SizeOf<RECT>());
+        try
+        {
+            Marshal.StructureToPtr(current, rect, false);
+            SendMessage(hWnd, WM_DPICHANGED, new IntPtr((int)((dpi << 16) | dpi)), rect);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(rect);
+        }
     }
 #endif
 }

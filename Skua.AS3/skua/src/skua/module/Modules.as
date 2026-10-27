@@ -1,5 +1,6 @@
 package skua.module {
 import flash.events.Event;
+import flash.utils.getTimer;
 
 import skua.Main;
 
@@ -36,11 +37,25 @@ public class Modules {
         }
     }
 
+    private static const FRAME_UPDATE_INTERVAL:int = 100;
+    private static var _lastFrameUpdate:int = 0;
+
     public static function handleFrame(e:Event):void {
+        var now:int = getTimer();
+        if (now - _lastFrameUpdate < FRAME_UPDATE_INTERVAL) {
+            return;
+        }
+        _lastFrameUpdate = now;
+
+        var game:* = Main.instance.getGame();
+        if (game == null) {
+            return;
+        }
+
         for (var name:String in _modules) {
             var module:Module = _modules[name];
             if (module.enabled) {
-                module.onFrame(Main.instance.getGame());
+                module.onFrame(game);
             }
         }
     }

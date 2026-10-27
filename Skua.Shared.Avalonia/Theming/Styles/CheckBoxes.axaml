@@ -9,6 +9,10 @@
     <Style Selector="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource SkuaTextBrush}" />
     </Style>
+    <!-- 6px after the label so the keyboard focus ring, drawn on the control's own edge, doesn't cover it -->
+    <Style Selector="CheckBox, RadioButton">
+        <Setter Property="Padding" Value="8,0,6,0" />
+    </Style>
     
     <Style Selector="CheckBox.icon">
         <Setter Property="MinWidth" Value="0" />

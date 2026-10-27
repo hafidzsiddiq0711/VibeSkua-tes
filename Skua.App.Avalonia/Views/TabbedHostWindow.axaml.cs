@@ -44,6 +44,7 @@ public partial class TabbedHostWindow : Window
 
     private SubclassProc? _subclassProc;
     private const int WM_SKUA_CHILD_READY = 0x0400 + 440;
+    private const int WM_SKUA_CHILD_DPICHANGED = 0x0400 + 441;
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
@@ -331,6 +332,7 @@ public partial class TabbedHostWindow : Window
         Opened += TabbedHostWindow_Opened;
         PositionChanged += (s, e) => OnWindowPositionChanged(e.Point);
         SizeChanged += (s, e) => { ScheduleReposition(); UpdateTabScrollButtons(); };
+        ScalingChanged += (s, e) => Dispatcher.UIThread.Post(RepositionWithFreshCache, DispatcherPriority.Loaded);
 
         PropertyChanged += (s, e) => { if (e.Property == WindowStateProperty || e.Property == IsVisibleProperty) ScheduleReposition(); };
         Activated += (s, e) => { ScheduleReposition(); UpdateTabScrollButtons(); };
@@ -586,6 +588,14 @@ public partial class TabbedHostWindow : Window
             return IntPtr.Zero;
         }
 
+        // A child moved onto a monitor with another scale may have resized itself. Its new size is invisible to the
+        // position cache, so place it again.
+        if (uMsg == WM_SKUA_CHILD_DPICHANGED)
+        {
+            Dispatcher.UIThread.Post(RepositionWithFreshCache, DispatcherPriority.Loaded);
+            return IntPtr.Zero;
+        }
+
         if (uMsg == WM_ENTERSIZEMOVE)
         {
             IntPtr res = DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -694,7 +704,7 @@ public partial class TabbedHostWindow : Window
                 try
                 {
                     pipeServer = new NamedPipeServerStream(
-                        "VibeSkuaTabHostPipe",
+                        App.HostPipeName,
                         PipeDirection.In,
                         NamedPipeServerStream.MaxAllowedServerInstances,
                         PipeTransmissionMode.Byte,
@@ -1406,6 +1416,23 @@ public partial class TabbedHostWindow : Window
         ScheduleReposition();
     }
 
+    // Places the tabs now, even mid-drag. A drag only moves them (FastReposition) at the size and offset cached when
+    // it started, which are wrong once the host or a child has crossed onto a monitor with another scale.
+    private void RepositionWithFreshCache()
+    {
+        if (_isClosing) return;
+
+        bool dragging = _isDraggingWindow;
+        _isDraggingWindow = false;
+        _lastX = int.MinValue;
+        _lastY = int.MinValue;
+        _lastW = int.MinValue;
+        _lastH = int.MinValue;
+        _lastActiveHwnd = IntPtr.Zero;
+        DoReposition();
+        _isDraggingWindow = dragging;
+    }
+
     private void OnWindowPositionChanged(PixelPoint newPos)
     {
         if (!IsLoaded || _isClosing || WindowState == WindowState.Minimized || !IsVisible)
@@ -1744,15 +1771,20 @@ public partial class TabbedHostWindow : Window
 
         if (_tabs.Count == 0 || !InstancesTabControl.Items.OfType<TabItem>().Any())
         {
-            // Keep the host window alive when the final account tab closes.
-            // This allows the user to open another tab without restarting VibeSkua.
             _lastSelectedTab = null;
             _lastActiveHwnd = IntPtr.Zero;
             _isGridViewEnabled = false;
 
-            // Explicitly keep the host alive and visible after the final child exits.
-            // The host is the desktop MainWindow, so closing a child tab must not leave
-            // the application with no visible window or trigger an accidental shutdown.
+            // Army Queue passes this flag so its monitored host process exits after the
+            // final account finishes. Without it, keep the normal reusable tab host open.
+            if (_initialArgs.Contains("--exit-on-script-stop", StringComparer.OrdinalIgnoreCase))
+            {
+                Close();
+                return;
+            }
+
+            // Keep the normal host alive when the final account tab closes so the user
+            // can open another tab without restarting VibeSkua.
             if (!IsVisible)
                 Show();
             if (WindowState == WindowState.Minimized)
@@ -1968,6 +2000,11 @@ public partial class TabbedHostWindow : Window
             p.StartInfo.ArgumentList.Add(_hostHwnd.ToInt64().ToString());
             p.StartInfo.ArgumentList.Add("--host-pid");
             p.StartInfo.ArgumentList.Add(Process.GetCurrentProcess().Id.ToString());
+            if (!string.IsNullOrWhiteSpace(App.HostInstanceId))
+            {
+                p.StartInfo.ArgumentList.Add("--host-instance");
+                p.StartInfo.ArgumentList.Add(App.HostInstanceId);
+            }
 
             foreach (string arg in clientArgs)
             {

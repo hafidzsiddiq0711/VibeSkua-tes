@@ -15,19 +15,29 @@
         <Setter Property="Cursor" Value="Hand" />
     </Style>
 
-    <!-- Keyboard focus: an accent ring 2px outside the control -->
-    <Style Selector="Button, ToggleButton, CheckBox, RadioButton, ToggleSwitch, Slider">
-        <Setter Property="FocusAdorner">
+    <!-- Keyboard focus: an accent ring on the control's own edge, following its corners, with a page-coloured
+         inner line so it still shows on accent fills. Avalonia only shows a focus adorner for Tab/arrow focus,
+         never for a click. It replaces Fluent's default for every control that keeps the default (TextBox and
+         ComboBox opt out and use their accent border). It must stay inside the control: templated controls
+         clip to their bounds and the adorner is clipped with them, so a ring drawn outside never shows. -->
+    <Style Selector="AdornerLayer">
+        <Setter Property="DefaultFocusAdorner">
             <FocusAdornerTemplate>
-                <Border BorderThickness="2" BorderBrush="{DynamicResource SkuaAccentBrush}" CornerRadius="8" Margin="-4" />
+                <Border BorderThickness="2" BorderBrush="{DynamicResource SkuaAccentBrush}"
+                        CornerRadius="{ReflectionBinding $self.(AdornerLayer.AdornedElement).CornerRadius}">
+                    <Border BorderThickness="1" BorderBrush="{DynamicResource SkuaPageBrush}"
+                            CornerRadius="{ReflectionBinding $self.Parent.CornerRadius}" />
+                </Border>
             </FocusAdornerTemplate>
         </Setter>
     </Style>
-    <!-- Rows and tabs sit inside clipped containers, so their ring is drawn on their own edge -->
-    <Style Selector="ListBoxItem, TabItem, ComboBoxItem, MenuItem">
+    <!-- These draw their shape on a template part and leave CornerRadius at 0, so their ring gets the theme's r6 -->
+    <Style Selector="CheckBox, RadioButton, ToggleSwitch, Slider, TabItem">
         <Setter Property="FocusAdorner">
             <FocusAdornerTemplate>
-                <Border BorderThickness="2" BorderBrush="{DynamicResource SkuaAccentBrush}" CornerRadius="6" />
+                <Border BorderThickness="2" BorderBrush="{DynamicResource SkuaAccentBrush}" CornerRadius="6">
+                    <Border BorderThickness="1" BorderBrush="{DynamicResource SkuaPageBrush}" CornerRadius="5" />
+                </Border>
             </FocusAdornerTemplate>
         </Setter>
     </Style>
@@ -38,6 +48,12 @@
         <Setter Property="BorderBrush" Value="{DynamicResource SkuaBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" Easing="CubicEaseOut" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
         <Setter Property="Foreground" Value="{DynamicResource SkuaTextBrush}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="SemiBold" />

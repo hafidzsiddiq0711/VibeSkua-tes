@@ -11,7 +11,7 @@
   <UserControl.Styles>
     <!-- One equipment slot: icon, slot name, item, enhancement chip -->
     <Style Selector="Grid.slot">
-      <Setter Property="Height" Value="34" />
+      <Setter Property="Height" Value="38" />
       <Setter Property="Margin" Value="10,0" />
     </Style>
     <Style Selector="Grid.slot materialIcons|MaterialIcon">
@@ -35,7 +35,7 @@
     </Style>
   </UserControl.Styles>
 
-  <Grid Margin="12" ColumnDefinitions="200,*" ColumnSpacing="12">
+  <Grid Margin="14" ColumnDefinitions="220,*" ColumnSpacing="14">
     <!-- Saved loadouts -->
     <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto" RowSpacing="8">
       <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" MinHeight="26">
@@ -49,11 +49,16 @@
       </Grid>
 
       <ListBox Grid.Row="1"
+               Background="{DynamicResource SkuaSurfaceBrush}"
+               BorderBrush="{DynamicResource SkuaBorderBrush}"
+               BorderThickness="1"
+               CornerRadius="10"
+               Padding="4"
                ItemsSource="{Binding Loadouts}"
                SelectedItem="{Binding SelectedLoadout, Mode=TwoWay}">
         <ListBox.ItemTemplate>
           <DataTemplate>
-            <StackPanel Spacing="1" Margin="2,2">
+            <StackPanel Spacing="3" Margin="4,4">
               <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
               <TextBlock Text="{Binding Class}" FontSize="10" Foreground="{DynamicResource SkuaMutedTextBrush}" TextTrimming="CharacterEllipsis" />
             </StackPanel>
@@ -98,7 +103,7 @@
               Background="{DynamicResource SkuaSurfaceBrush}"
               BorderBrush="{DynamicResource SkuaBorderBrush}"
               BorderThickness="1"
-              CornerRadius="8">
+              CornerRadius="10">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <StackPanel>
             <Grid Classes="slot" ColumnDefinitions="24,64,*,Auto">

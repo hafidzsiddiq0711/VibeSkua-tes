@@ -42,6 +42,18 @@ public partial class GroupItemViewModel : ObservableObject, IGroupItemViewModel
     }
 
     [RelayCommand]
+    private void StartInNewWindow()
+    {
+        WeakReferenceMessenger.Default.Send<StartGroupMessage>(new(this, false, true));
+    }
+
+    [RelayCommand]
+    private void StartWithScriptInNewWindow()
+    {
+        WeakReferenceMessenger.Default.Send<StartGroupMessage>(new(this, true, true));
+    }
+
+    [RelayCommand]
     private void Rename()
     {
         WeakReferenceMessenger.Default.Send<RenameGroupMessage>(new(this));

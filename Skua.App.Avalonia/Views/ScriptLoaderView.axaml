@@ -5,15 +5,15 @@
              x:DataType="vms:ScriptLoaderViewModel"
              x:Class="Skua.App.Avalonia.Views.ScriptLoaderView">
   
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10" RowSpacing="8">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12" RowSpacing="10">
         
         <!-- 1. Header Status Card -->
         <Border Grid.Row="0"
                 Background="{DynamicResource SkuaSurfaceBrush}"
                 BorderBrush="{DynamicResource SkuaBorderBrush}"
                 BorderThickness="1"
-                CornerRadius="6"
-                Padding="12,8">
+                CornerRadius="10"
+                Padding="14,10">
             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                 <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
                     <TextBlock Text="LOADED SCRIPT"
@@ -70,7 +70,7 @@
             <!-- Load Script -->
             <Button Grid.Row="0" Grid.Column="0"
                     Classes="skua-button"
-                    Height="32"
+                    Height="34"
                     Padding="8,0"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Center"

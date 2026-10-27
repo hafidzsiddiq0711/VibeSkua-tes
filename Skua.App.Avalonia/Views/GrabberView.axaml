@@ -20,10 +20,10 @@
         </Style>
         <Style Selector="ListBox.grabber-nav ListBoxItem">
             <Setter Property="IsEnabled" Value="{ReflectionBinding IsSelectable}" />
-            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="MinHeight" Value="36" />
             <Setter Property="Padding" Value="10,0" />
             <Setter Property="Margin" Value="0,0,0,4" />
-            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="CornerRadius" Value="8" />
             <Setter Property="Background" Value="{DynamicResource SkuaSurfaceAltBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource SkuaBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
@@ -59,7 +59,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid ColumnDefinitions="156,*" Margin="12,12,0,0" ColumnSpacing="0">
+    <Grid ColumnDefinitions="164,*" Margin="14,12,0,0" ColumnSpacing="0">
         <ListBox Grid.Column="0"
                  Classes="grabber-nav"
                  Margin="0,0,0,12"

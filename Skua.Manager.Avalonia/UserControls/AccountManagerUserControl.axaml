@@ -350,7 +350,7 @@
                 CornerRadius="8"
                 Padding="8,6"
                 Margin="0,4,0,4">
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
                 <ComboBox Grid.Column="0"
                           Height="34"
                           HorizontalAlignment="Stretch"
@@ -375,7 +375,10 @@
                         <TextBlock Text="Start Selected" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="2"
+                <Button Grid.Column="2" Height="34" VerticalAlignment="Center" Classes="icon" Command="{Binding StartAccountsInNewWindowCommand}" ToolTip.Tip="Start selected accounts in a separate window">
+                    <materialIcons:MaterialIcon Kind="OpenInNew" Width="16" Height="16" />
+                </Button>
+                <Button Grid.Column="3"
                         Height="34"
                         VerticalAlignment="Center"
                         Classes="skua-button"
@@ -385,6 +388,9 @@
                         <materialIcons:MaterialIcon Kind="PlayCircle" Width="16" Height="16" VerticalAlignment="Center" />
                         <TextBlock Text="Start All" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </StackPanel>
+                </Button>
+                <Button Grid.Column="4" Height="34" VerticalAlignment="Center" Classes="icon" Command="{Binding StartAllAccountsInNewWindowCommand}" ToolTip.Tip="Start all accounts in a separate window">
+                    <materialIcons:MaterialIcon Kind="OpenInNew" Width="16" Height="16" />
                 </Button>
             </Grid>
         </Border>

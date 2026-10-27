@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$MxmlcPath
+    [string]$MxmlcPath,
+    [string]$OutputPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,7 +10,12 @@ $projectRoot = Join-Path $scriptRoot 'skua'
 $sourcePath = Join-Path $projectRoot 'src'
 $mainSourcePath = Join-Path $sourcePath 'skua\Main.as'
 $outputDirectory = Join-Path $projectRoot 'bin'
-$outputPath = Join-Path $outputDirectory 'skua.swf'
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    $outputPath = Join-Path $outputDirectory 'skua.swf'
+}
+else {
+    $outputPath = [System.IO.Path]::GetFullPath($OutputPath)
+}
 
 if (-not (Test-Path -LiteralPath $mainSourcePath)) {
     throw "AS3 entry point was not found: $mainSourcePath"
@@ -21,12 +27,33 @@ if ([string]::IsNullOrWhiteSpace($MxmlcPath)) {
         $MxmlcPath = $mxmlcCommand.Source
     }
     elseif ($env:FLEX_HOME) {
-        $MxmlcPath = Join-Path $env:FLEX_HOME 'bin\mxmlc.bat'
+        $candidate = Join-Path $env:FLEX_HOME 'bin\mxmlc.bat'
+        if (Test-Path -LiteralPath $candidate) {
+            $MxmlcPath = $candidate
+        }
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($MxmlcPath)) {
+    $searchRoots = @(
+        'C:\MoonshineSDKs',
+        'C:\ApacheFlex',
+        $env:ProgramFiles,
+        ${env:ProgramFiles(x86)},
+        $env:LOCALAPPDATA
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
+
+    foreach ($searchRoot in $searchRoots) {
+        $foundCompiler = Get-ChildItem -LiteralPath $searchRoot -Filter 'mxmlc.bat' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($foundCompiler) {
+            $MxmlcPath = $foundCompiler.FullName
+            break
+        }
     }
 }
 
 if ([string]::IsNullOrWhiteSpace($MxmlcPath) -or -not (Test-Path -LiteralPath $MxmlcPath)) {
-    throw 'Apache Flex mxmlc was not found. Install Apache Flex SDK 4.16.1 or pass -MxmlcPath.'
+    throw 'Flex mxmlc was not found. Add it to PATH, set FLEX_HOME, install a Flex SDK in a common SDK location, or pass -MxmlcPath.'
 }
 
 if (-not $env:FLEX_HOME) {
@@ -37,7 +64,8 @@ if (-not $env:PLAYERGLOBAL_HOME) {
     $env:PLAYERGLOBAL_HOME = Join-Path $env:FLEX_HOME 'frameworks\libs\player'
 }
 
-New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+$resolvedOutputDirectory = Split-Path -Parent $outputPath
+New-Item -ItemType Directory -Path $resolvedOutputDirectory -Force | Out-Null
 
 & $MxmlcPath `
     -source-path $sourcePath `
