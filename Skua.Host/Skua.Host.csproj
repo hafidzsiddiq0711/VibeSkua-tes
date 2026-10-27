@@ -21,6 +21,8 @@
     <ProjectReference Include="..\Skua.Core.Interfaces\Skua.Core.Interfaces.csproj" />
     <ProjectReference Include="..\Skua.Core.Models\Skua.Core.Models.csproj" />
     <ProjectReference Include="..\Skua.Core.Utils\Skua.Core.Utils.csproj" />
+    <!-- WinForms stand-in for community scripts (only off Windows; the desktop app never references this). -->
+    <ProjectReference Include="..\Skua.WinFormsShim\Skua.WinFormsShim.csproj" />
   </ItemGroup>
 
 </Project>
