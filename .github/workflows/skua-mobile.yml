@@ -1,0 +1,38 @@
+name: Skua Mobile
+
+on:
+  push:
+    branches: [ skua-mobile ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    name: Skua headless on Linux (build + compiler selftest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build Skua.Headless
+        run: dotnet build Skua.Headless/Skua.Headless.csproj -c Release -o out/headless
+
+      - name: Selftest (compile a script, then real CoreBots scripts from the repo)
+        run: dotnet out/headless/skua-headless.dll selftest --with-scripts
+
+  windows-app:
+    name: Desktop app still builds (RemoteFlashUtil moved to Skua.Core)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build Skua.App.Avalonia/Skua.App.Avalonia.csproj -c Release

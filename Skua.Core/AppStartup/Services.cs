@@ -50,6 +50,14 @@ public static class Services
         }
     }
 
+    /// <summary>
+    /// Extra folder of reference assemblies for the script compiler. Hosts whose assemblies
+    /// aren't files on disk (Android packs them inside the APK, so Assembly.Location and
+    /// TRUSTED_PLATFORM_ASSEMBLIES are empty) ship reference DLLs and point this at them.
+    /// Set before the first compiler is created.
+    /// </summary>
+    public static string? ReferenceDirectory { get; set; }
+
     private static List<PortableExecutableReference>? _cachedBaseReferences;
     private static readonly object _referenceCacheLock = new();
 
@@ -76,6 +84,13 @@ public static class Services
 
                         if (IsManagedAssembly(path))
                             assemblyMap[fileName] = path;
+                    }
+
+                    // Host-provided references win (first file name added is kept).
+                    if (!string.IsNullOrEmpty(ReferenceDirectory) && Directory.Exists(ReferenceDirectory))
+                    {
+                        foreach (string dll in Directory.EnumerateFiles(ReferenceDirectory, "*.dll"))
+                            AddAssemblyPath(dll);
                     }
 
                     foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())

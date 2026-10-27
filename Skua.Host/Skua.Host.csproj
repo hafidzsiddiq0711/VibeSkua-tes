@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Skua without a desktop UI: Skua.Core wired with headless platform services and the
+       RemoteFlashUtil transport. Shared by Skua.Headless (console) and Skua.Mobile (Android). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Skua.Core\Skua.Core.csproj" />
+    <ProjectReference Include="..\Skua.Core.Interfaces\Skua.Core.Interfaces.csproj" />
+    <ProjectReference Include="..\Skua.Core.Models\Skua.Core.Models.csproj" />
+    <ProjectReference Include="..\Skua.Core.Utils\Skua.Core.Utils.csproj" />
+  </ItemGroup>
+
+</Project>

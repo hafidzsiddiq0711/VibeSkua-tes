@@ -18,7 +18,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 
-namespace Skua.App.Avalonia.Flash;
+namespace Skua.Core.Flash;
 
 /// <summary>
 /// PoC: an <see cref="IFlashUtil"/> that drives a remote skua.swf over TCP instead of a local
