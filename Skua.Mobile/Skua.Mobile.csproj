@@ -11,8 +11,8 @@
     <LangVersion>latest</LangVersion>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <ApplicationId>com.skua.mobile</ApplicationId>
-    <ApplicationVersion>3</ApplicationVersion>
-    <ApplicationDisplayVersion>0.2.1</ApplicationDisplayVersion>
+    <ApplicationVersion>4</ApplicationVersion>
+    <ApplicationDisplayVersion>0.3.0</ApplicationDisplayVersion>
     <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
     <AndroidPackageFormats>apk</AndroidPackageFormats>
     <!-- Scripts are compiled at runtime and use reflection over Skua.Core: no trimming, no AOT. -->

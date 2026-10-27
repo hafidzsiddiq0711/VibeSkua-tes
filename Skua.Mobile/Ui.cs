@@ -9,18 +9,20 @@ using Skua.Host;
 
 namespace Skua.Mobile;
 
-/// <summary>Small helpers for the code-built UI (black and gold, like the Skua theme).</summary>
+/// <summary>Building blocks of the code-built UI (dark, with Skua gold).</summary>
 public static class Ui
 {
-    public static readonly Color Background = Color.ParseColor("#101014");
-    public static readonly Color Card = Color.ParseColor("#1B1B22");
-    public static readonly Color CardBorder = Color.ParseColor("#2C2C36");
+    public static readonly Color Background = Color.ParseColor("#0E0E12");
+    public static readonly Color Surface = Color.ParseColor("#17171D");
+    public static readonly Color Surface2 = Color.ParseColor("#22222B");
+    public static readonly Color Border = Color.ParseColor("#2A2A34");
     public static readonly Color Gold = Color.ParseColor("#FDAF2D");
-    public static readonly Color Text = Color.ParseColor("#F2F2F2");
-    public static readonly Color Muted = Color.ParseColor("#9A9AA6");
-    public static readonly Color Info = Color.ParseColor("#8CD5FF");
-    public static readonly Color Good = Color.ParseColor("#7CDB8A");
-    public static readonly Color Bad = Color.ParseColor("#FF8A80");
+    public static readonly Color Text = Color.ParseColor("#F2F2F5");
+    public static readonly Color Muted = Color.ParseColor("#9A9AA8");
+    public static readonly Color Info = Color.ParseColor("#6CC4FF");
+    public static readonly Color Good = Color.ParseColor("#5BD38A");
+    public static readonly Color Bad = Color.ParseColor("#FF7A70");
+    public static readonly Color Night = Color.ParseColor("#B48CFF");
 
     public static int Dp(Context c, float dp) => (int)(dp * c.Resources!.DisplayMetrics!.Density + 0.5f);
 
@@ -30,7 +32,7 @@ public static class Ui
         t.SetTextSize(Android.Util.ComplexUnitType.Sp, sp);
         t.SetTextColor(color ?? Text);
         if (bold)
-            t.SetTypeface(null, TypefaceStyle.Bold);
+            t.SetTypeface(Typeface.Create("sans-serif-medium", TypefaceStyle.Normal), TypefaceStyle.Bold);
         return t;
     }
 
@@ -44,16 +46,25 @@ public static class Ui
         return d;
     }
 
+    public static LinearLayout.LayoutParams Margins(Context c, int width, int height, float left, float top, float right, float bottom, float weight = 0)
+    {
+        LinearLayout.LayoutParams lp = new(width, height, weight);
+        lp.SetMargins(Dp(c, left), Dp(c, top), Dp(c, right), Dp(c, bottom));
+        return lp;
+    }
+
     public static Android.Widget.Button Button(Context c, string text, Action onClick, bool primary = false, float sp = 13)
     {
         Android.Widget.Button b = new(c) { Text = text };
         b.SetAllCaps(false);
         b.SetTextSize(Android.Util.ComplexUnitType.Sp, sp);
-        b.Background = Rounded(primary ? Gold : Color.ParseColor("#2A2A33"), 10, c);
+        b.Background = Rounded(primary ? Gold : Surface2, 12, c, primary ? null : Border);
         b.SetTextColor(primary ? Color.Black : Text);
-        b.SetPadding(Dp(c, 8), Dp(c, 6), Dp(c, 8), Dp(c, 6));
-        b.SetMinHeight(Dp(c, 40));
-        b.SetMinimumHeight(Dp(c, 40));
+        b.SetTypeface(Typeface.Create("sans-serif-medium", TypefaceStyle.Normal), TypefaceStyle.Normal);
+        b.SetPadding(Dp(c, 6), 0, Dp(c, 6), 0);
+        b.SetMinHeight(Dp(c, 42));
+        b.SetMinimumHeight(Dp(c, 42));
+        b.StateListAnimator = null;
         b.Click += (_, _) => onClick();
         return b;
     }
@@ -62,12 +73,54 @@ public static class Ui
     {
         LinearLayout row = new(c) { Orientation = Orientation.Horizontal };
         foreach (View v in views)
-        {
-            LinearLayout.LayoutParams lp = new(0, ViewGroup.LayoutParams.WrapContent, 1f);
-            lp.SetMargins(Dp(c, 3), Dp(c, 3), Dp(c, 3), Dp(c, 3));
-            row.AddView(v, lp);
-        }
+            row.AddView(v, Margins(c, 0, ViewGroup.LayoutParams.WrapContent, 3, 3, 3, 3, 1f));
         return row;
+    }
+
+    /// <summary>A small rounded label (mode, state …).</summary>
+    public static TextView Chip(Context c, string text, Color color, bool filled = false)
+    {
+        TextView chip = Label(c, text, 11, filled ? Color.Black : color, bold: true);
+        chip.Background = Rounded(filled ? color : Color.Argb(40, color.R, color.G, color.B), 20, c);
+        chip.SetPadding(Dp(c, 9), Dp(c, 3), Dp(c, 9), Dp(c, 3));
+        chip.LetterSpacing = 0.04f;
+        return chip;
+    }
+
+    /// <summary>A selectable filter chip (groups).</summary>
+    public static TextView FilterChip(Context c, string text, bool selected, Action onClick)
+    {
+        TextView chip = Label(c, text, 13, selected ? Color.Black : Text, bold: selected);
+        chip.Background = Rounded(selected ? Gold : Surface2, 20, c, selected ? null : Border);
+        chip.SetPadding(Dp(c, 14), Dp(c, 7), Dp(c, 14), Dp(c, 7));
+        chip.Click += (_, _) => onClick();
+        return chip;
+    }
+
+    /// <summary>Statistic tile: small caption over a big value. Returns the value view.</summary>
+    public static (View Tile, TextView Value) Tile(Context c, string caption, string value)
+    {
+        LinearLayout tile = new(c) { Orientation = Orientation.Vertical };
+        tile.Background = Rounded(Surface, 14, c, Border);
+        tile.SetPadding(Dp(c, 12), Dp(c, 10), Dp(c, 12), Dp(c, 10));
+        tile.AddView(Label(c, caption.ToUpperInvariant(), 10, Muted, bold: true));
+        TextView v = Label(c, value, 17, Text, bold: true);
+        v.SetSingleLine(true);
+        v.Ellipsize = TextUtils.TruncateAt.End;
+        tile.AddView(v);
+        return (tile, v);
+    }
+
+    /// <summary>Round badge with the account's initial.</summary>
+    public static TextView Avatar(Context c, string name, Color color)
+    {
+        TextView a = Label(c, name.Length > 0 ? name[..1].ToUpperInvariant() : "?", 17, Color.Black, bold: true);
+        a.Gravity = GravityFlags.Center;
+        GradientDrawable d = new();
+        d.SetShape(ShapeType.Oval);
+        d.SetColor(color);
+        a.Background = d;
+        return a;
     }
 
     public static EditText Field(Context c, string hint, string value, InputTypes type = InputTypes.ClassText)
@@ -77,6 +130,13 @@ public static class Ui
         e.SetTextColor(Text);
         e.SetHintTextColor(Muted);
         return e;
+    }
+
+    public static TextView Caption(Context c, string text)
+    {
+        TextView t = Label(c, text, 12, Muted);
+        t.SetPadding(0, Dp(c, 10), 0, 0);
+        return t;
     }
 
     public static AlertDialog.Builder Dialog(Context c, string title) =>
@@ -93,7 +153,7 @@ public static class Ui
     {
         Context c = activity;
         LinearLayout box = new(c) { Orientation = Orientation.Vertical };
-        box.SetPadding(Dp(c, 18), Dp(c, 8), Dp(c, 18), Dp(c, 8));
+        box.SetPadding(Dp(c, 20), Dp(c, 8), Dp(c, 20), Dp(c, 8));
         if (note is not null)
         {
             TextView n = Label(c, note, 12, Muted);
@@ -104,7 +164,7 @@ public static class Ui
         EditText? search = null;
         if (defs.Count > 12)
         {
-            search = Field(c, "Cari opsi …", "");
+            search = Field(c, "Search options …", "");
             box.AddView(search);
         }
 
@@ -118,8 +178,8 @@ public static class Ui
                 group = def.Group;
                 if (group.Length > 0)
                 {
-                    TextView h = Label(c, group, 13, Gold, bold: true);
-                    h.SetPadding(0, Dp(c, 12), 0, Dp(c, 2));
+                    TextView h = Label(c, group.ToUpperInvariant(), 11, Gold, bold: true);
+                    h.SetPadding(0, Dp(c, 14), 0, Dp(c, 2));
                     box.AddView(h);
                     headers[group] = h;
                 }
@@ -133,12 +193,12 @@ public static class Ui
             {
                 case "bool":
                 {
-                    CheckBox check = new(c) { Text = def.Label, Checked = bool.TryParse(current, out bool b) && b };
-                    check.SetTextColor(Text);
-                    row.AddView(check);
+                    Switch toggle = new(c) { Text = def.Label, Checked = bool.TryParse(current, out bool b) && b };
+                    toggle.SetTextColor(Text);
+                    row.AddView(toggle);
                     // Keep the CoreBots style ("True"/"False") when the stored value used it.
                     bool pascal = current.Length > 0 && char.IsUpper(current[0]);
-                    read = () => pascal ? (check.Checked ? "True" : "False") : (check.Checked ? "true" : "false");
+                    read = () => pascal ? (toggle.Checked ? "True" : "False") : (toggle.Checked ? "true" : "false");
                     break;
                 }
                 case "choice":
@@ -146,8 +206,7 @@ public static class Ui
                     row.AddView(Label(c, def.Label, 13, Muted));
                     string[] choices = def.Choices ?? Array.Empty<string>();
                     Spinner spinner = new(c);
-                    ArrayAdapter<string> adapter = new(c, Android.Resource.Layout.SimpleSpinnerDropDownItem, choices);
-                    spinner.Adapter = adapter;
+                    spinner.Adapter = new ArrayAdapter<string>(c, Android.Resource.Layout.SimpleSpinnerDropDownItem, choices);
                     int index = Array.FindIndex(choices, x => string.Equals(x, current, StringComparison.OrdinalIgnoreCase));
                     if (index >= 0)
                         spinner.SetSelection(index);
@@ -191,14 +250,14 @@ public static class Ui
         scroll.AddView(box);
         Dialog(c, title)
             .SetView(scroll)!
-            .SetPositiveButton("Simpan", (_, _) =>
+            .SetPositiveButton("Save", (_, _) =>
             {
                 Dictionary<string, string> result = new();
                 foreach (var (def, _, read) in rows)
                     result[def.Key] = read().Trim();
                 onSave(result);
             })!
-            .SetNegativeButton("Batal", (_, _) => { })!
+            .SetNegativeButton("Cancel", (_, _) => { })!
             .Show();
     }
 }

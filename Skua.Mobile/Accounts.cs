@@ -49,7 +49,7 @@ public static class AccountStore
             }
             catch (Exception e)
             {
-                AppLog.Add($"accounts.json rusak: {e.Message}");
+                AppLog.Add($"accounts.json is damaged: {e.Message}");
             }
             if (_accounts is null)
             {

@@ -67,7 +67,7 @@ public sealed class BotController : IDisposable
         host.GameReady += () =>
         {
             _autoStartDone = false;
-            _ = AutopilotAsync("game siap");
+            _ = AutopilotAsync("game ready");
         };
     }
 
@@ -103,7 +103,7 @@ public sealed class BotController : IDisposable
                 return;
             if (p.AutoLogin && p.Username.Length > 0 && !_host.Bot.Player.Playing)
             {
-                AddLog($"Autopilot ({reason}): login {p.Username} ...");
+                AddLog($"Autopilot ({reason}): logging in {p.Username} …");
                 if (!await _host.LoginAsync(p.Username, p.Password, p.Server))
                     return;
             }
@@ -151,7 +151,7 @@ public sealed class BotController : IDisposable
             }
             catch (Exception e)
             {
-                AddLog($"Opsi {key}={value} gagal: {e.Message}");
+                AddLog($"Option {key}={value} failed: {e.Message}");
             }
         }
     }
@@ -222,20 +222,20 @@ public sealed class BotController : IDisposable
                 config.OptionValues[option] = prop.Value.ToString();
         }
         config.Save();
-        AddLog($"Opsi script disimpan: {Path.GetFileName(script)}");
+        AddLog($"Script options saved: {Path.GetFileName(script)}");
     }
 
     private IScriptOptionContainer LoadConfig(string script)
     {
         if (_host.Manager.ScriptRunning)
-            throw new InvalidOperationException("Hentikan script dulu untuk mengubah opsinya.");
+            throw new InvalidOperationException("Stop the script first to change its options.");
         string path = ScriptPath(script);
         _host.Manager.OverrideStorage = null;
         _host.Manager.SetLoadedScript(path);
         object compiled = _host.Manager.Compile(ScriptPlatformCompat.ReadScript(path))
-            ?? throw new InvalidOperationException("Script gagal di-compile.");
+            ?? throw new InvalidOperationException("The script failed to compile.");
         _host.Manager.LoadScriptConfig(compiled);
-        return _host.Manager.Config ?? throw new InvalidOperationException("Script tidak punya opsi.");
+        return _host.Manager.Config ?? throw new InvalidOperationException("The script has no options.");
     }
 
     // ------------------------------------------------------------------ status
@@ -289,7 +289,7 @@ public sealed class BotController : IDisposable
         RefreshStatusLoop();
         _listener = new TcpListener(IPAddress.Loopback, ControlPort(_slot));
         _listener.Start();
-        AddLog($"Bot #{_slot}: kontrol di 127.0.0.1:{ControlPort(_slot)}, game di 127.0.0.1:{GamePort(_slot)}");
+        AddLog($"Bot #{_slot}: control on 127.0.0.1:{ControlPort(_slot)}, game on 127.0.0.1:{GamePort(_slot)}");
         Task.Run(async () =>
         {
             while (!_cts.IsCancellationRequested)
@@ -379,8 +379,8 @@ public sealed class BotController : IDisposable
             }
             case "configure":
                 _profile = req["profile"]?.ToObject<BotProfile>() ?? new BotProfile();
-                AddLog($"Profil: {_profile.Username} @ {_profile.Server}, script: {(_profile.Script.Length > 0 ? _profile.Script : "-")}");
-                _ = AutopilotAsync("profil baru");
+                AddLog($"Profile: {_profile.Username} @ {_profile.Server}, script: {(_profile.Script.Length > 0 ? _profile.Script : "-")}");
+                _ = AutopilotAsync("new profile");
                 return null;
             case "login":
                 return await _host.LoginAsync(_profile.Username, _profile.Password, _profile.Server);
@@ -388,7 +388,7 @@ public sealed class BotController : IDisposable
             {
                 string script = req.Value<string>("script") ?? _profile.Script;
                 if (script.Length == 0)
-                    throw new InvalidOperationException("Belum ada script.");
+                    throw new InvalidOperationException("No script chosen.");
                 _profile.Script = script;
                 Exception? error = await _host.StartScriptAsync(ScriptPath(script));
                 if (error is not null)
@@ -432,14 +432,14 @@ public sealed class BotController : IDisposable
                 }
                 return null;
             case "shutdown":
-                AddLog("Bot dimatikan dari manager.");
+                AddLog("Bot stopped from the manager.");
                 if (_host.Manager.ScriptRunning)
                     await _host.StopScriptAsync();
                 try { Headless?.Stop(); } catch { }
                 _ = Task.Run(async () => { await Task.Delay(300); ShutdownRequested?.Invoke(); });
                 return null;
             default:
-                throw new InvalidOperationException($"Perintah tidak dikenal: {cmd}");
+                throw new InvalidOperationException($"Unknown command: {cmd}");
         }
     }
 

@@ -32,7 +32,7 @@ public static class AppFiles
         CopyAsset(context, "AdvancedSkills.json", Path.Combine(files, "defaults", "AdvancedSkills.json"));
         CopyAsset(context, "QuestData.json", Path.Combine(files, "defaults", "QuestData.json"));
 
-        AppLog.Add("Menyiapkan compiler script (sekali per versi app) ...");
+        AppLog.Add("Preparing the script compiler (once per app version) …");
         if (Directory.Exists(refs))
             Directory.Delete(refs, true);
         Directory.CreateDirectory(refs);
@@ -44,7 +44,7 @@ public static class AppFiles
         }
         catch (Exception e)
         {
-            AppLog.Add($"refs.zip tidak ada/rusak, compile script mungkin gagal: {e.Message}");
+            AppLog.Add($"refs.zip missing or damaged, scripts may not compile: {e.Message}");
         }
         File.WriteAllText(stampFile, stamp);
     }
@@ -82,7 +82,7 @@ public static class AppFiles
         }
         catch (Exception e)
         {
-            AppLog.Add($"Asset {asset} gagal disalin: {e.Message}");
+            AppLog.Add($"Could not copy asset {asset}: {e.Message}");
         }
     }
 
@@ -155,7 +155,7 @@ public static class AppFiles
         string crashFile = Path.Combine(context.FilesDir!.AbsolutePath, $"crash-{name}.txt");
         if (File.Exists(crashFile))
         {
-            log("Crash sebelumnya:\n" + File.ReadAllText(crashFile));
+            log("Previous crash:\n" + File.ReadAllText(crashFile));
             File.Delete(crashFile);
         }
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>

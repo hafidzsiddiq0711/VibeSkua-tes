@@ -7,6 +7,8 @@
   <uses-permission android:name="android.permission.WAKE_LOCK" />
   <!-- Lets "Start All" open each account's game while the manager is in the background. -->
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <!-- Asks to be left out of battery optimization, so HyperOS/MIUI don't stop the bots. -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
   <!-- The game runs in the Artix Games Launcher's player. -->
   <queries>

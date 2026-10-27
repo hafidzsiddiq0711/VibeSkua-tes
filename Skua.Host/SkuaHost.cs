@@ -182,7 +182,7 @@ public sealed class SkuaHost : IDisposable
         });
         _flash.FlashCall += OnFlashCall;
         _flash.InitializeFlash();
-        Say($"Menunggu game (skua-mobile.swf) ...");
+        Say($"Waiting for the game (skua-mobile.swf) …");
     }
 
     private void OnFlashCall(string function, params object[] args)
@@ -193,12 +193,12 @@ public sealed class SkuaHost : IDisposable
                 // Same as SkuaStartupHandler.LoadGame; on every (re)connect the movie asks again.
                 _loadRequested = true;
                 _loaded = false;
-                Say("Game tersambung, memuat AQW ...");
+                Say("Game connected, loading AQW …");
                 Task.Run(() => _flash.Call("loadClient"));
                 break;
             case "loaded":
                 _loaded = true;
-                Say("AQW termuat.");
+                Say("AQW loaded.");
                 Action? ready = GameReady;
                 if (ready is not null)
                     Task.Run(ready);
@@ -213,7 +213,7 @@ public sealed class SkuaHost : IDisposable
     /// <summary>Log in like the desktop's auto-login (SkuaStartupHandler.Login).</summary>
     public async Task<bool> LoginAsync(string username, string password, string server, CancellationToken token = default)
     {
-        Say("Menunggu AQW termuat ...");
+        Say("Waiting for AQW to load …");
         while (!_loaded)
         {
             token.ThrowIfCancellationRequested();
@@ -223,10 +223,10 @@ public sealed class SkuaHost : IDisposable
         if (string.IsNullOrWhiteSpace(server))
             server = "Twilly";
         Bot.Servers.SetLoginInfo(username, password);
-        Say($"Login {username} ke server {server} ...");
+        Say($"Logging in {username} on {server} …");
 
         List<Server> servers = await Bot.Servers.GetServers(true);
-        Say(servers.Count > 0 ? $"Daftar server: {servers.Count} server." : "Daftar server dari API AQW gagal diambil, pakai daftar dari game.");
+        Say(servers.Count > 0 ? $"Server list: {servers.Count} servers." : "Could not get the server list from the AQW API, using the game's list.");
         if (servers.Count == 0)
         {
             // Without the API list EnsureRelogin has no candidates and never logs in. Log in first:
@@ -237,7 +237,7 @@ public sealed class SkuaHost : IDisposable
                 token.ThrowIfCancellationRequested();
                 await Task.Delay(250, token);
             }
-            Say($"Server dari game: {Bot.Servers.ServerList.Count}.");
+            Say($"Servers from the game: {Bot.Servers.ServerList.Count}.");
         }
 
         await Task.Run(() => Bot.Servers.EnsureRelogin(server), token);
@@ -249,7 +249,7 @@ public sealed class SkuaHost : IDisposable
         }
 
         bool ok = Bot.Player.Playing;
-        Say(ok ? $"Masuk game sebagai {username}." : "Login gagal / belum masuk game.");
+        Say(ok ? $"In game as {username}." : "Login failed / not in game yet.");
         return ok;
     }
 
@@ -278,7 +278,7 @@ public sealed class SkuaHost : IDisposable
         try { await scripts.UpdateSkillSetsFile(); } catch { }
         try { await scripts.UpdateQuestDataFile(); } catch { }
         try { await scripts.UpdateJunkItemsFile(); } catch { }
-        Say($"Script diperbarui: {count} file. Total {scripts.Downloaded}/{scripts.Total}.");
+        Say($"Scripts updated: {count} files. Total {scripts.Downloaded}/{scripts.Total}.");
         return count;
     }
 
@@ -291,7 +291,7 @@ public sealed class SkuaHost : IDisposable
             await StopScriptAsync();
         Manager.SilentConfig = true;
         Manager.SetLoadedScript(path);
-        Say($"Menjalankan script: {Path.GetFileName(path)}");
+        Say($"Starting script: {Path.GetFileName(path)}");
         Exception? error = await Manager.StartScript();
         if (error is not null)
             Say($"Script error: {error.Message}");
@@ -301,7 +301,7 @@ public sealed class SkuaHost : IDisposable
     public async Task StopScriptAsync()
     {
         await Manager.StopScript();
-        Say("Script dihentikan.");
+        Say("Script stopped.");
     }
 
     /// <summary>Compile a script source without running it (self-test of the compiler setup).</summary>

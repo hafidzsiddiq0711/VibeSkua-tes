@@ -15,6 +15,8 @@ public class QuestRequirementWiki extends Module
 
     override public function onFrame(game:*):void
     {
+        // Before the world exists (login screen) there is no UI yet.
+        if (!game || !game.ui) return;
         var modalStack:* = game.ui.ModalStack;
         if (!modalStack || modalStack.numChildren == 0) return;
 

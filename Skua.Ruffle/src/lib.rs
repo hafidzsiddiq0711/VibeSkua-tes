@@ -155,6 +155,8 @@ pub fn run(config: Config, stop: Arc<AtomicBool>) -> Result<(), String> {
 pub type LogCallback = extern "C" fn(*const c_char);
 
 static LOG_CALLBACK: Mutex<Option<LogCallback>> = Mutex::new(None);
+static RECENT: std::sync::LazyLock<Mutex<std::collections::HashMap<String, (Instant, u32)>>> =
+    std::sync::LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
 
 struct Logger;
 
@@ -169,6 +171,21 @@ impl log::Log for Logger {
             return;
         }
         let line = format!("[ruffle {}] {}", record.level(), record.args());
+        // Games often repeat the same error every frame: pass it on once a minute at most.
+        {
+            let mut seen = RECENT.lock().unwrap();
+            let now = Instant::now();
+            seen.retain(|_, (at, _)| now.duration_since(*at) < Duration::from_secs(60));
+            let key: String = line.chars().take(200).collect();
+            if let Some((_, count)) = seen.get_mut(&key) {
+                *count += 1;
+                return;
+            }
+            if seen.len() > 200 {
+                seen.clear();
+            }
+            seen.insert(key, (now, 0));
+        }
         match *LOG_CALLBACK.lock().unwrap() {
             Some(cb) => {
                 if let Ok(c) = CString::new(line.replace('\0', " ")) {
