@@ -137,7 +137,8 @@ public class MainActivity : Activity
         // Group actions
         LinearLayout actions = Ui.Row(this,
             Ui.Button(this, "▶  Start all", StartAll, primary: true, sp: 14),
-            Ui.Button(this, "■  Stop all", StopAll, sp: 14));
+            Ui.Button(this, "■  Stop all", StopAll, sp: 14),
+            Ui.Button(this, "⟳  Scripts", UpdateScripts, sp: 14));
         root.AddView(actions, Ui.Margins(this, ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, -3, 4, -3, 0));
 
         // Accounts
