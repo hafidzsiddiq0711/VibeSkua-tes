@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.DependencyInjection;
+using Skua.Core.AppStartup;
 using Skua.Core.Flash;
 using Skua.Core.GameProxy;
 using Skua.Core.Interfaces;
