@@ -33,7 +33,22 @@ jobs:
           done
 
       - name: Selftest (compile a script, then real CoreBots scripts from the repo)
-        run: dotnet out/headless/skua-headless.dll selftest --with-scripts
+        run: |
+          set -o pipefail
+          dotnet out/headless/skua-headless.dll selftest --with-scripts 2>&1 | tee selftest.log
+
+      - name: Report selftest output as annotation
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          lines = open("selftest.log", encoding="utf-8", errors="replace").read().splitlines()
+          keep = [l for l in lines if any(k in l for k in ("Exception", "   at ", "FAIL", "OK", "error", "Unhandled"))]
+          for chunk_start in range(0, min(len(keep), 120), 40):
+              chunk = "\n".join(keep[chunk_start:chunk_start + 40]).replace("%", "%25").replace("\n", "%0A")
+              print(f"::error title=selftest-{chunk_start}::{chunk}")
+          tail = "\n".join(lines[-40:]).replace("%", "%25").replace("\n", "%0A")
+          print(f"::error title=selftest-tail::{tail}")
+          PY
 
   windows-app:
     name: Desktop app still builds (RemoteFlashUtil moved to Skua.Core)
