@@ -214,7 +214,8 @@ public class MainActivity : Activity
             bool playing = state.Alive && state.Status.Value<bool?>("playing") == true;
             dot.SetTextColor(running ? Ui.Good : playing ? Ui.Gold : state.Alive ? Ui.Info : Ui.Bad);
         }
-        _summary.Text = $"v{AppFiles.VersionName(this)} · {AccountStore.All.Count} akun · {BotHub.RunningCount} bot jalan";
+        string artix = AppFiles.IsArtixSkuaInstalled(this) ? "Artix (Skua)" : AppFiles.IsArtixInstalled(this) ? "Artix resmi (1 akun)" : "Artix belum ada";
+        _summary.Text = $"v{AppFiles.VersionName(this)} · {AccountStore.All.Count} akun · {BotHub.RunningCount} bot jalan · {artix}";
     }
 
     // ------------------------------------------------------------------ account actions
@@ -228,14 +229,17 @@ public class MainActivity : Activity
             Ui.Toast(this, "Isi username & password dulu (⚙ → Edit akun).");
             return;
         }
-        Ui.Toast(this, $"Menyalakan {account.Title} …");
+        if (!AppFiles.IsArtixSkuaInstalled(this) && BotHub.RunningCount > 0 && BotHub.SlotOf(account) is null)
+            Ui.Toast(this, "Artix resmi cuma bisa 1 game: game lain akan freeze. Pasang Artix (Skua) untuk multi-akun.");
+        else
+            Ui.Toast(this, $"Menyalakan {account.Title} …");
         Run(async () => await BotHub.PlayAsync(this, account), $"Main {account.Title}");
     }
 
     private void OpenGame(Account account)
     {
         if (BotHub.SlotOf(account) is int slot)
-            AppFiles.LaunchGame(this, slot);
+            AppFiles.LaunchGame(this, slot, account.RenderScale);
         else
             Ui.Toast(this, "Bot akun ini belum menyala. Tekan ▶ Main.");
     }
@@ -323,12 +327,21 @@ public class MainActivity : Activity
         }));
         CheckBox autoStart = new(this) { Text = "Jalankan script otomatis setelah login", Checked = account.AutoStart };
         autoStart.SetTextColor(Ui.Text);
+        int[] scales = { 100, 75, 50, 35 };
+        string[] scaleLabels = { "Resolusi game 100% (tajam)", "Resolusi game 75%", "Resolusi game 50% (hemat)", "Resolusi game 35% (paling hemat)" };
+        Spinner scale = new(this);
+        scale.Adapter = new ArrayAdapter<string>(this, Android.Resource.Layout.SimpleSpinnerDropDownItem, scaleLabels);
+        int scaleIndex = Array.IndexOf(scales, account.RenderScale);
+        scale.SetSelection(scaleIndex >= 0 ? scaleIndex : 0);
         box.AddView(name);
         box.AddView(user);
         box.AddView(pass);
         box.AddView(group);
         box.AddView(serverButton);
         box.AddView(autoStart);
+        box.AddView(scale);
+        if (!AppFiles.IsArtixSkuaInstalled(this))
+            box.AddView(Ui.Label(this, "Resolusi hanya berlaku di Artix (Skua).", 11, Ui.Muted));
 
         Ui.Dialog(this, existing is null ? "Akun baru" : "Edit akun")
             .SetView(box)!
@@ -340,6 +353,7 @@ public class MainActivity : Activity
                 account.Group = string.IsNullOrWhiteSpace(group.Text) ? "Default" : group.Text!.Trim();
                 account.Server = server;
                 account.AutoStart = autoStart.Checked;
+                account.RenderScale = scales[Math.Clamp(scale.SelectedItemPosition, 0, scales.Length - 1)];
                 AccountStore.Upsert(account);
                 Reconfigure(account);
             })!
@@ -452,6 +466,15 @@ public class MainActivity : Activity
         }
         if (accounts.Count > BotHub.MaxSlots)
             Ui.Toast(this, $"Maksimal {BotHub.MaxSlots} akun sekaligus; yang lain dilewati.");
+        if (accounts.Count > 1 && !AppFiles.IsArtixSkuaInstalled(this))
+        {
+            Ui.Dialog(this, "Butuh Artix (Skua)")
+                .SetMessage("Artix resmi cuma bisa menjalankan 1 game: game kedua membekukan yang pertama. " +
+                            "Pasang Artix (Skua) (versi multi-akun) dulu, atau main 1 akun saja.")!
+                .SetPositiveButton("OK", (_, _) => { })!
+                .Show();
+            return;
+        }
 
         bool canLaunchFromBackground = Settings.CanDrawOverlays(this);
         if (accounts.Count > 1 && !canLaunchFromBackground)
@@ -491,9 +514,10 @@ public class MainActivity : Activity
                 if (i > 0 && !launchAll)
                     break;
                 int slot = started[i].Slot;
+                int scale = started[i].Account.RenderScale;
                 _ui.Post(() =>
                 {
-                    try { AppFiles.LaunchGame(this, slot); }
+                    try { AppFiles.LaunchGame(this, slot, scale); }
                     catch (Exception e) { AppLog.Add($"Game {slot}: {e.Message}"); }
                 });
                 // Let each game load before the next one starts (memory and CPU).

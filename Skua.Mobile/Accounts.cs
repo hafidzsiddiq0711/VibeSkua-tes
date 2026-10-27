@@ -15,6 +15,8 @@ public sealed class Account
     /// <summary>Script path relative to the scripts folder.</summary>
     public string Script { get; set; } = "";
     public bool AutoStart { get; set; }
+    /// <summary>Game render resolution in percent (Artix (Skua) only): lower = lighter.</summary>
+    public int RenderScale { get; set; } = 100;
     /// <summary>Skua options changed for this account (applied after login).</summary>
     public Dictionary<string, string> SkuaOptions { get; set; } = new();
 

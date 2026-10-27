@@ -13,6 +13,7 @@ public sealed class BotState
     public JObject Status { get; set; } = new();
     public List<string> Log { get; } = new();
     public long LogSeq { get; set; }
+    public DateTime LastSeenUtc { get; set; } = DateTime.UtcNow;
 
     public string Describe()
     {
@@ -114,6 +115,7 @@ public static class BotHub
                     JObject status = (JObject)(await client.SendAsync("status", null, 4000))!;
                     state.Status = status;
                     state.Alive = true;
+                    state.LastSeenUtc = DateTime.UtcNow;
                     long seq = status.Value<long?>("logSeq") ?? 0;
                     if (seq > state.LogSeq)
                     {
@@ -131,8 +133,14 @@ public static class BotHub
                 catch
                 {
                     state.Alive = false;
-                    // A bot that was asked to start may still be booting; one that died long ago is dropped.
-                    if (DateTime.UtcNow - _startedAt.GetValueOrDefault(slot, DateTime.MinValue) > TimeSpan.FromMinutes(2))
+                    // Busy or still booting bots miss a poll now and then; only a bot silent for
+                    // two minutes (since it was started or last answered) is let go.
+                    DateTime last = state.LastSeenUtc > _startedAt.GetValueOrDefault(slot, DateTime.MinValue)
+                        ? state.LastSeenUtc
+                        : _startedAt.GetValueOrDefault(slot, DateTime.UtcNow);
+                    if (last == DateTime.MinValue)
+                        state.LastSeenUtc = last = DateTime.UtcNow;
+                    if (DateTime.UtcNow - last > TimeSpan.FromMinutes(2))
                     {
                         lock (_slots)
                             _slots.Remove(accountId);
@@ -174,7 +182,7 @@ public static class BotHub
             lock (State(slot).Log)
                 State(slot).Log.Clear();
             State(slot).LogSeq = 0;
-            BotServiceBase.Start(_app, slot, account.Title);
+            BotServiceBase.Start(_app, slot, account.Title, account.RenderScale);
             await WaitAliveAsync(client, TimeSpan.FromSeconds(120));
         }
         await ConfigureAsync(account);
@@ -216,7 +224,7 @@ public static class BotHub
     {
         int slot = await StartBotAsync(account);
         if (openGame)
-            AppFiles.LaunchGame(context, slot);
+            AppFiles.LaunchGame(context, slot, account.RenderScale);
     }
 
     public static Task<JToken?> SendAsync(Account account, string cmd, JObject? args = null, int timeoutMs = 15000)

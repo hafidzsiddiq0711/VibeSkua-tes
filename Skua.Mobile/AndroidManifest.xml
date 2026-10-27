@@ -11,6 +11,8 @@
   <!-- The game runs in the Artix Games Launcher's player. -->
   <queries>
     <package android:name="com.artix.launcher.ruffle" />
+    <!-- Private multi-account build of Artix (one game process per account). -->
+    <package android:name="com.artix.launcher.ruffle.skua" />
   </queries>
 
   <!-- Bot services (one process per account, :bot0..:bot6) are declared by [Service] attributes

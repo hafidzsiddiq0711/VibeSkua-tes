@@ -15,6 +15,7 @@ public abstract class BotServiceBase : Service
 {
     private const string Channel = "bots";
     private PowerManager.WakeLock? _wakeLock;
+    private int _renderScale = 100;
 
     protected abstract int Slot { get; }
 
@@ -29,6 +30,7 @@ public abstract class BotServiceBase : Service
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
         string label = intent?.GetStringExtra("label") ?? (Slot == 0 ? "Helper" : $"Akun {Slot}");
+        _renderScale = intent?.GetIntExtra("renderScale", _renderScale) ?? _renderScale;
         // Foreground first: Android kills a service that doesn't call StartForeground quickly.
         StartForegroundCompat(label);
 
@@ -54,7 +56,7 @@ public abstract class BotServiceBase : Service
             manager.CreateNotificationChannel(new NotificationChannel(Channel, "Bot Skua", NotificationImportance.Low));
 
         // Tapping a bot's notification opens its game (allowed from the background, unlike startActivity).
-        Intent tap = Slot == 0 ? new Intent(this, typeof(MainActivity)) : AppFiles.GameIntent(Slot);
+        Intent tap = Slot == 0 ? new Intent(this, typeof(MainActivity)) : AppFiles.GameIntent(this, Slot, _renderScale);
         PendingIntent pending = PendingIntent.GetActivity(this, 100 + Slot, tap, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent)!;
         Intent manage = new(this, typeof(MainActivity));
         PendingIntent managePending = PendingIntent.GetActivity(this, 200 + Slot, manage, PendingIntentFlags.Immutable)!;
@@ -92,10 +94,11 @@ public abstract class BotServiceBase : Service
         base.OnDestroy();
     }
 
-    public static void Start(Context context, int slot, string label)
+    public static void Start(Context context, int slot, string label, int renderScale = 100)
     {
         Intent intent = new(context, Types[slot]);
         intent.PutExtra("label", label);
+        intent.PutExtra("renderScale", renderScale);
         if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
             context.StartForegroundService(intent);
         else

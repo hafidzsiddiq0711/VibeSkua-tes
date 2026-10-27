@@ -8,6 +8,8 @@ namespace Skua.Mobile;
 public static class AppFiles
 {
     public const string ArtixPackage = "com.artix.launcher.ruffle";
+    /// <summary>The private patched Artix: PlayerActivity1..6 each in its own process.</summary>
+    public const string ArtixSkuaPackage = "com.artix.launcher.ruffle.skua";
     public const string ArtixPlayer = "rs.ruffle.PlayerActivity";
     public const string SwfFileName = "skua-mobile.swf";
 
@@ -96,11 +98,11 @@ public static class AppFiles
         catch { return "?"; }
     }
 
-    public static bool IsArtixInstalled(Context context)
+    private static bool IsInstalled(Context context, string package)
     {
         try
         {
-            context.PackageManager!.GetPackageInfo(ArtixPackage, 0);
+            context.PackageManager!.GetPackageInfo(package, 0);
             return true;
         }
         catch
@@ -109,11 +111,16 @@ public static class AppFiles
         }
     }
 
+    public static bool IsArtixInstalled(Context context) => IsArtixSkuaInstalled(context) || IsInstalled(context, ArtixPackage);
+
+    /// <summary>True when the multi-account Artix (Skua) is installed: one game process per slot.</summary>
+    public static bool IsArtixSkuaInstalled(Context context) => IsInstalled(context, ArtixSkuaPackage);
+
     /// <summary>
     /// The Artix player pointed at bot <paramref name="slot"/>. Each slot is its own document
     /// (own task in Recents), so several games can run at once and reopening one brings it back.
     /// </summary>
-    public static Intent GameIntent(int slot)
+    public static Intent GameIntent(Context context, int slot, int renderScale = 100)
     {
         int port = Skua.Host.BotController.GamePort(slot);
         // The address rides in the URL query: Ruffle turns it into loaderInfo.parameters even
@@ -121,7 +128,17 @@ public static class AppFiles
         Android.Net.Uri uri = Android.Net.Uri.Parse($"content://{SwfProvider.Authority}/{SwfFileName}?skuaHost=127.0.0.1:{port}&slot={slot}")!;
         Intent intent = new(Intent.ActionView);
         intent.SetDataAndType(uri, "application/x-shockwave-flash");
-        intent.SetClassName(ArtixPackage, ArtixPlayer);
+        if (IsArtixSkuaInstalled(context))
+        {
+            // Own process per slot, so games don't freeze each other.
+            intent.SetClassName(ArtixSkuaPackage, slot > 0 ? $"{ArtixPlayer}{slot}" : ArtixPlayer);
+            if (renderScale is > 0 and < 100)
+                intent.PutExtra("skua.RENDER_SCALE", renderScale);
+        }
+        else
+        {
+            intent.SetClassName(ArtixPackage, ArtixPlayer);
+        }
         intent.PutExtra("rs.ruffle.FLASHVARS", $"skuaHost=127.0.0.1:{port}");
         intent.PutExtra("rs.ruffle.CHROMELESS", true);
         intent.PutExtra("rs.ruffle.GAME_NAME", "aqw");
@@ -129,7 +146,8 @@ public static class AppFiles
         return intent;
     }
 
-    public static void LaunchGame(Context context, int slot) => context.StartActivity(GameIntent(slot));
+    public static void LaunchGame(Context context, int slot, int renderScale = 100) =>
+        context.StartActivity(GameIntent(context, slot, renderScale));
 
     /// <summary>Unhandled .NET exceptions go to a crash file shown on the next start.</summary>
     public static void InstallCrashLogging(Context context, string name, Action<string> log)
