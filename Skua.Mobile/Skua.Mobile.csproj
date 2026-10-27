@@ -29,6 +29,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Headless Ruffle (Skua.Ruffle, built by CI for arm64). -->
+    <AndroidNativeLibrary Include="lib\arm64-v8a\libskua_ruffle.so" Abi="arm64-v8a" Condition="Exists('lib\arm64-v8a\libskua_ruffle.so')" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- refs.zip (reference assemblies for the script compiler) is produced by CI. -->
     <AndroidAsset Include="Assets\**\*" Exclude="Assets\README.txt" />
   </ItemGroup>

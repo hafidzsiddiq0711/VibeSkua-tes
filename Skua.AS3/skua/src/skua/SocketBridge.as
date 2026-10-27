@@ -6,6 +6,7 @@ import flash.events.MouseEvent;
 import flash.events.ProgressEvent;
 import flash.events.SecurityErrorEvent;
 import flash.events.TimerEvent;
+import flash.media.SoundMixer;
 import flash.net.SharedObject;
 import flash.net.Socket;
 import flash.text.TextField;
@@ -38,6 +39,8 @@ public class SocketBridge {
     private var retryTimer:Timer;
     /** Addresses tried in turn until one answers (e.g. Skua Mobile on this phone, then the PC). */
     private var candidates:Array = [];
+    /** Skua moved this account to another game window (or headless): stay disconnected. */
+    private var retired:Boolean = false;
     private var candidateIndex:int = 0;
 
     private var ui:Sprite;
@@ -55,9 +58,12 @@ public class SocketBridge {
     /** ActionScript -> Skua event. Same shape as ExternalInterface.call(name, rest). */
     public function call(name:String, rest:Array):void {
         var line:String = JSON.stringify({ev: name, args: [rest]});
-        // Replayed on every (re)connect so Skua can start after the movie (and restart).
+        // Replayed on every (re)connect so Skua can start after the movie (and restart). Once the
+        // game is loaded, a reconnecting bot is told "loaded" instead, so the game isn't reloaded.
         if (name == "requestLoadGame")
-            sticky[name] = line;
+            sticky = {requestLoadGame: line};
+        else if (name == "loaded")
+            sticky = {loaded: line};
         if (connected)
             writeLine(line);
     }
@@ -178,7 +184,7 @@ public class SocketBridge {
     }
 
     private function scheduleRetry():void {
-        if (host == null || retryTimer != null)
+        if (host == null || retryTimer != null || retired)
             return;
         retryTimer = new Timer(RETRY_MS, 1);
         retryTimer.addEventListener(TimerEvent.TIMER_COMPLETE, function(e:TimerEvent):void {
@@ -241,6 +247,10 @@ public class SocketBridge {
         var result:* = null;
         if (name == "__ping") {
             result = "pong";
+        } else if (name == "__retire") {
+            writeLine(JSON.stringify({id: id, r: true}));
+            retire();
+            return;
         } else {
             var func:Function = callbacks[name] as Function;
             if (func != null) {
@@ -264,6 +274,34 @@ public class SocketBridge {
             sock.writeByte(10);
             sock.flush();
         } catch (e:Error) {
+        }
+    }
+
+    /** Another game window (or the headless player) took over this account's bot. */
+    private function retire():void {
+        retired = true;
+        stopRetry();
+        closeSocket();
+        try {
+            // Keep this copy cheap until the window is closed.
+            root.stage.frameRate = 1;
+            SoundMixer.stopAll();
+        } catch (e:Error) {
+        }
+        var cover:Sprite = new Sprite();
+        cover.graphics.beginFill(0x000000, 0.92);
+        cover.graphics.drawRect(0, 0, 958, 550);
+        cover.graphics.endFill();
+        var text:TextField = label("This account is now played in another window (or headless).\nYou can close this window.", 26, 0xFDAF2D);
+        text.width = 840;
+        text.height = 200;
+        text.x = 60;
+        text.y = 200;
+        cover.addChild(text);
+        try {
+            root.stage.addChild(cover);
+        } catch (e2:Error) {
+            root.addChild(cover);
         }
     }
 

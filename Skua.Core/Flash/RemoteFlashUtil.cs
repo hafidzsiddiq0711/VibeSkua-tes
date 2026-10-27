@@ -185,9 +185,12 @@ public sealed class RemoteFlashUtil : IFlashUtil
 
             client.NoDelay = true;
             string peer = client.Client.RemoteEndPoint?.ToString() ?? "?";
-            // Drop the previous connection (e.g. the phone reconnected after Wi-Fi hiccup).
+            // Drop the previous connection (e.g. the phone reconnected after Wi-Fi hiccup). If that
+            // game is still alive (the account moved to another window or headless), tell it to
+            // stop reconnecting, or the two would keep taking the bot from each other.
             lock (_writeLock)
             {
+                try { _writer?.WriteLine("{\"id\":0,\"fn\":\"__retire\",\"args\":[]}"); } catch { }
                 try { _client?.Dispose(); } catch { }
             }
             new Thread(() =>

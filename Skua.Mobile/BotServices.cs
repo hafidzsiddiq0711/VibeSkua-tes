@@ -29,7 +29,7 @@ public abstract class BotServiceBase : Service
 
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
-        string label = intent?.GetStringExtra("label") ?? (Slot == 0 ? "Helper" : $"Akun {Slot}");
+        string label = intent?.GetStringExtra("label") ?? (Slot == 0 ? "Helper" : $"Account {Slot}");
         _renderScale = intent?.GetIntExtra("renderScale", _renderScale) ?? _renderScale;
         // Foreground first: Android kills a service that doesn't call StartForeground quickly.
         StartForegroundCompat(label);
@@ -44,7 +44,7 @@ public abstract class BotServiceBase : Service
         Task.Run(() =>
         {
             try { BotRuntime.Start(this, Slot, Quit); }
-            catch (Exception e) { BotRuntime.Log($"Gagal menyalakan bot: {e}"); }
+            catch (Exception e) { BotRuntime.Log($"Bot failed to start: {e}"); }
         });
         return StartCommandResult.Sticky;
     }
@@ -63,7 +63,7 @@ public abstract class BotServiceBase : Service
 
         Notification notification = new Notification.Builder(this, Channel)
             .SetContentTitle(Slot == 0 ? "Skua Mobile (helper)" : $"Bot {Slot}: {label}")
-            .SetContentText(Slot == 0 ? "Update script / opsi script." : "Ketuk untuk membuka game akun ini.")
+            .SetContentText(Slot == 0 ? "Script updates and script options." : "Tap to open this account's game window.")
             .SetSmallIcon(Resource.Drawable.ic_stat_skua)
             .SetContentIntent(pending)
             .AddAction(new Notification.Action.Builder(Android.Graphics.Drawables.Icon.CreateWithResource(this, Resource.Drawable.ic_stat_skua), "Manager", managePending).Build())
@@ -155,6 +155,8 @@ public static class BotRuntime
 
             SkuaHost host = SkuaHost.Create($"listen-local:{BotController.GamePort(slot)}");
             BotController controller = new(host, slot);
+            if (slot > 0)
+                controller.Headless = new HeadlessGame(context, controller.AddLog);
             lock (_early)
             {
                 foreach (string line in _early)

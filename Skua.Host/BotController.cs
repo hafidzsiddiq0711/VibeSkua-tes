@@ -9,6 +9,15 @@ using System.Text;
 
 namespace Skua.Host;
 
+/// <summary>A game player without a screen in this bot's process (headless Ruffle).</summary>
+public interface IHeadlessGame
+{
+    /// <summary>Start playing skua-mobile.swf pointed at this bot's game port.</summary>
+    bool Start(int gamePort);
+    void Stop();
+    bool Running { get; }
+}
+
 /// <summary>What the manager asks one bot to do: who to log in and what to run.</summary>
 public sealed class BotProfile
 {
@@ -43,6 +52,9 @@ public sealed class BotController : IDisposable
     private int _autopilotRunning;
     // Auto start runs once per game load, so a script stopped by hand stays stopped.
     private volatile bool _autoStartDone;
+
+    /// <summary>Headless player for this platform (null: not available).</summary>
+    public IHeadlessGame? Headless { get; set; }
 
     /// <summary>The manager asked this bot to quit (the app ends the process).</summary>
     public event Action? ShutdownRequested;
@@ -243,6 +255,7 @@ public sealed class BotController : IDisposable
                     ["running"] = _host.Manager.ScriptRunning,
                     ["script"] = _host.Manager.ScriptRunning && _host.Manager.LoadedScript is { } ls ? Path.GetFileNameWithoutExtension(ls) : _profile.Script.Length > 0 ? Path.GetFileNameWithoutExtension(_profile.Script) : "",
                     ["memMb"] = Environment.WorkingSet / (1024 * 1024),
+                    ["headless"] = Headless?.Running == true,
                 };
                 try
                 {
@@ -404,10 +417,25 @@ public sealed class BotController : IDisposable
             case "scriptOptions.set":
                 SaveScriptOptions(req.Value<string>("script") ?? _profile.Script, (JObject?)req["values"] ?? new JObject());
                 return null;
+            case "headless.start":
+                if (Headless is null)
+                    throw new InvalidOperationException("Headless mode isn't available here.");
+                if (!Headless.Running && !Headless.Start(GamePort(_slot)))
+                    throw new InvalidOperationException("Headless game failed to start (see bot log).");
+                AddLog("Headless game started.");
+                return null;
+            case "headless.stop":
+                if (Headless?.Running == true)
+                {
+                    Headless.Stop();
+                    AddLog("Headless game stopped.");
+                }
+                return null;
             case "shutdown":
                 AddLog("Bot dimatikan dari manager.");
                 if (_host.Manager.ScriptRunning)
                     await _host.StopScriptAsync();
+                try { Headless?.Stop(); } catch { }
                 _ = Task.Run(async () => { await Task.Delay(300); ShutdownRequested?.Invoke(); });
                 return null;
             default:

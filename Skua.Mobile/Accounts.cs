@@ -17,10 +17,14 @@ public sealed class Account
     public bool AutoStart { get; set; }
     /// <summary>Game render resolution in percent (Artix (Skua) only): lower = lighter.</summary>
     public int RenderScale { get; set; } = 100;
+    /// <summary>"watch": game in an Artix window; "headless": no window, lightest.</summary>
+    public string Mode { get; set; } = "watch";
+
+    public bool Headless => Mode == "headless";
     /// <summary>Skua options changed for this account (applied after login).</summary>
     public Dictionary<string, string> SkuaOptions { get; set; } = new();
 
-    public string Title => Name.Length > 0 ? Name : User.Length > 0 ? User : "(tanpa nama)";
+    public string Title => Name.Length > 0 ? Name : User.Length > 0 ? User : "(no name)";
 }
 
 /// <summary>accounts.json in the app's private storage.</summary>

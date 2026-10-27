@@ -29,6 +29,8 @@ switch (command)
         return await Run();
     case "bot":
         return await Bot();
+    case "e2e":
+        return await EndToEnd();
     default:
         Console.WriteLine("usage: skua-headless selftest [--refs DIR] [--with-scripts]");
         Console.WriteLine("       skua-headless run --user U --pass P [--server S] [--script PATH] [--endpoint listen:5150] [--update-scripts]");
@@ -199,6 +201,42 @@ async Task<int> Bot()
     return 0;
 }
 
+// skua-headless e2e --ruffle PATH --swf PATH [--timeout 240]
+//   Headless Ruffle (skua-ruffle) plays skua-mobile.swf against a bot until AQW has loaded,
+//   driven through the manager protocol like Skua Mobile does. Exit 0 = AQW loaded headless.
+async Task<int> EndToEnd()
+{
+    const int slot = 5;
+    using SkuaHost host = SkuaHost.Create($"listen-local:{BotController.GamePort(slot)}");
+    using BotController bot = new(host, slot)
+    {
+        Headless = new ProcessHeadlessGame(Arg("--ruffle"), Arg("--swf")),
+    };
+    host.Log += line => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}");
+    host.Start();
+    bot.StartControlServer();
+    using BotClient client = new(slot);
+    var sw = Stopwatch.StartNew();
+    await client.SendAsync("headless.start");
+    int timeout = int.Parse(Arg("--timeout", "240"));
+    while (!host.GameLoaded && sw.Elapsed.TotalSeconds < timeout)
+        await Task.Delay(1000);
+    bool ok = host.GameLoaded;
+    if (ok)
+    {
+        // The login screen of the real game, read through the bridge.
+        await Task.Delay(5000);
+        Console.WriteLine($"login screen visible: {host.Bot.Flash.GetGameObject<bool>("mcLogin.visible", false)}");
+    }
+    var status = await client.SendAsync("status");
+    Console.WriteLine($"status: {status?.ToString(Newtonsoft.Json.Formatting.None)}");
+    await client.SendAsync("headless.stop");
+    Console.WriteLine(ok ? $"E2E OK: AQW loaded headless in {sw.Elapsed.TotalSeconds:F0} s" : "E2E FAILED: AQW did not load");
+    if (!ok && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        Console.WriteLine("::error title=e2e::AQW did not load in headless Ruffle");
+    return ok ? 0 : 1;
+}
+
 async Task<int> Run()
 {
     using SkuaHost host = SkuaHost.Create(Arg("--endpoint", "listen:5150"));
@@ -236,4 +274,32 @@ async Task<int> Run()
     }
     await host.StopScriptAsync();
     return 0;
+}
+
+
+/// <summary>Headless game as a skua-ruffle process (Linux).</summary>
+sealed class ProcessHeadlessGame(string ruffle, string swf) : IHeadlessGame
+{
+    private Process? _process;
+
+    public bool Running => _process is { HasExited: false };
+
+    public bool Start(int gamePort)
+    {
+        ProcessStartInfo info = new(ruffle) { RedirectStandardError = true, UseShellExecute = false };
+        info.ArgumentList.Add(swf);
+        info.ArgumentList.Add($"127.0.0.1:{gamePort}");
+        _process = Process.Start(info);
+        if (_process is null)
+            return false;
+        _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) Console.WriteLine($"  {e.Data}"); };
+        _process.BeginErrorReadLine();
+        return true;
+    }
+
+    public void Stop()
+    {
+        try { _process?.Kill(); } catch { }
+        _process = null;
+    }
 }

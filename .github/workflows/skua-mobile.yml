@@ -54,6 +54,72 @@ jobs:
           print(f"::error title=selftest-tail::{tail}")
           PY
 
+  ruffle:
+    name: Headless Ruffle (arm64 library + AQW end-to-end on Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ruffle sources with Skua's patches
+        run: |
+          set -e
+          REV=$(grep -o 'rev = "[0-9a-f]*"' Skua.Ruffle/Cargo.toml | head -1 | cut -d'"' -f2)
+          git init -q ruffle-src
+          git -C ruffle-src remote add origin https://github.com/ruffle-rs/ruffle.git
+          git -C ruffle-src fetch -q --depth 1 origin "$REV"
+          git -C ruffle-src checkout -q FETCH_HEAD
+          for p in tools/ruffle-patches/*.patch; do git -C ruffle-src apply "../$p"; done
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Skua.Ruffle
+
+      - name: Build for Linux (end-to-end test)
+        run: cargo build --release --manifest-path Skua.Ruffle/Cargo.toml --bin skua-ruffle
+
+      - name: Build libskua_ruffle.so for Android arm64
+        run: |
+          set -e
+          cargo install cargo-ndk --locked
+          cd Skua.Ruffle
+          cargo ndk --platform 26 -t arm64-v8a -o ../native build --release --lib
+          ls -la ../native/arm64-v8a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skua-ruffle-android
+          path: native/arm64-v8a/libskua_ruffle.so
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: End-to-end - AQW loads in headless Ruffle, driven like Skua Mobile
+        run: |
+          set -o pipefail
+          dotnet build Skua.Headless/Skua.Headless.csproj -c Release -o out/headless
+          dotnet out/headless/skua-headless.dll e2e --ruffle Skua.Ruffle/target/release/skua-ruffle \
+            --swf tools/remote-poc/skua-mobile.swf --timeout 300 2>&1 | tee e2e.log
+
+      - name: Report end-to-end output as annotation
+        if: always()
+        run: |
+          python3 - <<'PY'
+          lines = open("e2e.log", encoding="utf-8", errors="replace").read().splitlines() if __import__("os").path.exists("e2e.log") else []
+          tail = "\n".join(lines[-45:]).replace("%", "%25").replace("\n", "%0A")
+          print(f"::notice title=e2e::{tail}")
+          PY
+
   windows-app:
     name: Desktop app still builds (RemoteFlashUtil moved to Skua.Core)
     runs-on: windows-latest
@@ -67,6 +133,7 @@ jobs:
 
   android:
     name: Skua Mobile APK
+    needs: ruffle
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -104,6 +171,11 @@ jobs:
           cp tools/remote-poc/skua-mobile.swf Skua.Mobile/Assets/
           cp Skua.App.Avalonia/AdvancedSkills.json Skua.App.Avalonia/QuestData.json Skua.Mobile/Assets/
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: skua-ruffle-android
+          path: Skua.Mobile/lib/arm64-v8a
+
       - name: Android SDK dependencies
         run: dotnet build Skua.Mobile/Skua.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:AcceptAndroidSDKLicenses=True -p:AndroidSdkDirectory="$ANDROID_HOME"
 
@@ -138,5 +210,5 @@ jobs:
           gh release delete "$TAG" --yes --cleanup-tag || true
           gh release create "$TAG" apk/SkuaMobile.apk \
             --target "${{ github.sha }}" --prerelease \
-            --title "Skua Mobile (build terbaru)" \
-            --notes "Build otomatis dari commit ${{ github.sha }}. Unduh SkuaMobile.apk lalu install di HP (izinkan install dari sumber tidak dikenal). Butuh Artix Games Launcher."
+            --title "Skua Mobile (latest build)" \
+            --notes "Automatic build of ${{ github.sha }}. Download SkuaMobile.apk and install it on the phone."

@@ -415,3 +415,5 @@ skua_global_*.txt
 
 
 *.sln
+/ruffle-src
+Skua.Ruffle/target/

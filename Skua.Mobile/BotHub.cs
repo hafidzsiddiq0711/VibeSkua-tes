@@ -18,16 +18,16 @@ public sealed class BotState
     public string Describe()
     {
         if (!Alive)
-            return "Bot menyala …";
+            return "Starting bot …";
         JObject s = Status;
         if (s.Value<bool?>("connected") != true)
-            return "Menunggu game (Artix) …";
+            return s.Value<bool?>("headless") == true ? "Starting headless game …" : "Waiting for the game window …";
         if (s.Value<bool?>("loaded") != true)
-            return "Memuat AQW …";
+            return "Loading AQW …";
         if (s.Value<bool?>("playing") != true)
-            return "Di layar login";
+            return "On the login screen";
         string where = $"{s.Value<string>("map")} · Lv {s.Value<int?>("level")}";
-        return s.Value<bool?>("running") == true ? $"▶ {s.Value<string>("script")} · {where}" : $"Di game · {where}";
+        return s.Value<bool?>("running") == true ? $"Running {s.Value<string>("script")} · {where}" : $"In game · {where}";
     }
 }
 
@@ -169,7 +169,7 @@ public static class BotHub
     /// <summary>Start (or reuse) this account's bot and hand it the account. Returns the slot.</summary>
     public static async Task<int> StartBotAsync(Account account)
     {
-        int slot = SlotOf(account) ?? FreeSlot() ?? throw new InvalidOperationException($"Maksimal {MaxSlots} akun sekaligus.");
+        int slot = SlotOf(account) ?? FreeSlot() ?? throw new InvalidOperationException($"At most {MaxSlots} accounts at once.");
         lock (_slots)
             _slots[account.Id] = slot;
         SaveSlots();
@@ -177,7 +177,7 @@ public static class BotHub
         BotClient client = _clients[slot];
         if (!await client.PingAsync())
         {
-            AppLog.Add($"Menyalakan bot {slot} untuk {account.Title} …");
+            AppLog.Add($"Starting bot {slot} for {account.Title} …");
             _startedAt[slot] = DateTime.UtcNow;
             lock (State(slot).Log)
                 State(slot).Log.Clear();
@@ -216,21 +216,44 @@ public static class BotHub
                 return;
             await Task.Delay(1000);
         }
-        throw new TimeoutException($"Bot {client.Slot} tidak menyala (cek log bot).");
+        throw new TimeoutException($"Bot {client.Slot} didn't start (see its log).");
     }
 
-    /// <summary>Start the account's bot and open its game.</summary>
+    /// <summary>Start the account's bot and its game (an Artix window, or headless).</summary>
     public static async Task PlayAsync(Context context, Account account, bool openGame = true)
     {
         int slot = await StartBotAsync(account);
-        if (openGame)
+        if (account.Headless)
+            await _clients[slot].SendAsync("headless.start");
+        else if (openGame)
             AppFiles.LaunchGame(context, slot, account.RenderScale);
+    }
+
+    /// <summary>
+    /// Switch a running account between its Artix window and headless. The new game takes over
+    /// the bot; the old one is told to stand down (it shows "you can close this window").
+    /// </summary>
+    public static async Task SetModeAsync(Context context, Account account, bool headless)
+    {
+        account.Mode = headless ? "headless" : "watch";
+        AccountStore.Save();
+        if (SlotOf(account) is not int slot || !await _clients[slot].PingAsync())
+            return;
+        if (headless)
+        {
+            await _clients[slot].SendAsync("headless.start");
+        }
+        else
+        {
+            await _clients[slot].SendAsync("headless.stop");
+            AppFiles.LaunchGame(context, slot, account.RenderScale);
+        }
     }
 
     public static Task<JToken?> SendAsync(Account account, string cmd, JObject? args = null, int timeoutMs = 15000)
     {
         if (SlotOf(account) is not int slot)
-            throw new InvalidOperationException("Bot akun ini belum menyala.");
+            throw new InvalidOperationException("This account's bot isn't running.");
         return _clients[slot].SendAsync(cmd, args, timeoutMs);
     }
 
@@ -263,7 +286,7 @@ public static class BotHub
         BotClient helper = _clients[0];
         if (!await helper.PingAsync())
         {
-            AppLog.Add("Menyalakan bot helper …");
+            AppLog.Add("Starting helper bot …");
             BotServiceBase.Start(_app, 0, "Helper");
             await WaitAliveAsync(helper, TimeSpan.FromSeconds(120));
         }

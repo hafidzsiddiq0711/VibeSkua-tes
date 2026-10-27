@@ -1,0 +1,60 @@
+[package]
+name = "skua_ruffle"
+version = "0.3.0"
+edition = "2024"
+description = "Headless Ruffle for Skua: runs skua-mobile.swf (and AQW) without a screen or sound."
+publish = false
+
+[lib]
+# cdylib: libskua_ruffle.so loaded by the Skua Mobile bot process; rlib: the Linux test binary.
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "skua-ruffle"
+path = "src/bin/skua-ruffle.rs"
+
+[dependencies]
+ruffle_core = { git = "https://github.com/ruffle-rs/ruffle.git", rev = "fe6cfc545405b888ebb478ce1c211d63147ca49b", features = ["lzma", "default_compatibility_rules", "default_font"] }
+ruffle_common = { git = "https://github.com/ruffle-rs/ruffle.git", rev = "fe6cfc545405b888ebb478ce1c211d63147ca49b" }
+ruffle_frontend_utils = { git = "https://github.com/ruffle-rs/ruffle.git", rev = "fe6cfc545405b888ebb478ce1c211d63147ca49b", default-features = false, features = ["navigator"] }
+async-task = "4.7.1"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time"] }
+url = "2.5"
+log = { version = "0.4", features = ["std"] }
+tracing = { version = "0.1", features = ["log", "log-always"] }
+
+# TLS: native-tls on desktop Linux (CI test); rustls + ring on Android, with the CA files of the
+# system store (see SKUA_CA_DIRS in the navigator patch) instead of the platform verifier.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+ruffle_frontend_utils = { git = "https://github.com/ruffle-rs/ruffle.git", rev = "fe6cfc545405b888ebb478ce1c211d63147ca49b", default-features = false, features = ["navigator", "native-tls"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+ruffle_frontend_utils = { git = "https://github.com/ruffle-rs/ruffle.git", rev = "fe6cfc545405b888ebb478ce1c211d63147ca49b", default-features = false, features = ["navigator", "rustls-tls"] }
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+panic = "unwind"
+strip = true
+
+# Ruffle with Skua's patches (tools/ruffle-patches) applied, checked out next to this crate.
+# CI clones it to ../ruffle-src; all Ruffle crates must point there so they stay one set of types.
+[patch."https://github.com/ruffle-rs/ruffle.git"]
+asc = { path = "../ruffle-src/tools/asc" }
+build_playerglobal = { path = "../ruffle-src/core/build_playerglobal" }
+flv-rs = { path = "../ruffle-src/flv" }
+naga-agal = { path = "../ruffle-src/render/naga-agal" }
+naga-pixelbender = { path = "../ruffle-src/render/naga-pixelbender" }
+pixel_bender = { path = "../ruffle-src/render/pixel_bender" }
+ruffle_common = { path = "../ruffle-src/core/common" }
+ruffle_core = { path = "../ruffle-src/core" }
+ruffle_frontend_utils = { path = "../ruffle-src/frontend-utils" }
+ruffle_macros = { path = "../ruffle-src/core/macros" }
+ruffle_render = { path = "../ruffle-src/render" }
+ruffle_render_wgpu = { path = "../ruffle-src/render/wgpu" }
+ruffle_video = { path = "../ruffle-src/video" }
+ruffle_video_software = { path = "../ruffle-src/video/software" }
+ruffle_wstr = { path = "../ruffle-src/wstr" }
+swf = { path = "../ruffle-src/swf" }
