@@ -41,6 +41,8 @@ public sealed class BotController : IDisposable
     private TcpListener? _listener;
     private readonly CancellationTokenSource _cts = new();
     private int _autopilotRunning;
+    // Auto start runs once per game load, so a script stopped by hand stays stopped.
+    private volatile bool _autoStartDone;
 
     /// <summary>The manager asked this bot to quit (the app ends the process).</summary>
     public event Action? ShutdownRequested;
@@ -50,13 +52,20 @@ public sealed class BotController : IDisposable
         _host = host;
         _slot = slot;
         host.Log += AddLog;
-        host.GameReady += () => _ = AutopilotAsync("game siap");
+        host.GameReady += () =>
+        {
+            _autoStartDone = false;
+            _ = AutopilotAsync("game siap");
+        };
     }
 
     public static int ControlPort(int slot) => 6150 + slot;
     public static int GamePort(int slot) => 5150 + slot;
 
     public BotProfile Profile => _profile;
+
+    /// <summary>Last command other than ping/status/logs (the helper bot quits when idle).</summary>
+    public DateTime LastActivityUtc { get; private set; } = DateTime.UtcNow;
 
     public void AddLog(string text)
     {
@@ -88,8 +97,9 @@ public sealed class BotController : IDisposable
             }
             if (_host.Bot.Player.Playing)
                 ApplySkuaOptions(p.SkuaOptions);
-            if (p.AutoStart && p.Script.Length > 0 && _host.Bot.Player.Playing && !_host.Manager.ScriptRunning)
+            if (p.AutoStart && !_autoStartDone && p.Script.Length > 0 && _host.Bot.Player.Playing && !_host.Manager.ScriptRunning)
             {
+                _autoStartDone = true;
                 await Task.Delay(1000);
                 await _host.StartScriptAsync(ScriptPath(p.Script));
             }
@@ -317,7 +327,13 @@ public sealed class BotController : IDisposable
         {
             JObject req = JObject.Parse(line);
             reply["id"] = req["id"];
-            JToken? data = await RunAsync(req["cmd"]?.ToString() ?? "", req);
+            string cmd = req["cmd"]?.ToString() ?? "";
+            bool busy = cmd is not ("ping" or "status" or "logs");
+            if (busy)
+                LastActivityUtc = DateTime.UtcNow;
+            JToken? data = await RunAsync(cmd, req);
+            if (busy)
+                LastActivityUtc = DateTime.UtcNow;
             reply["ok"] = true;
             if (data is not null)
                 reply["data"] = data;

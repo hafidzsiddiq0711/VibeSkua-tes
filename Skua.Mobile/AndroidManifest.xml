@@ -5,27 +5,22 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!-- Lets "Start All" open each account's game while the manager is in the background. -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
   <!-- The game runs in the Artix Games Launcher's player. -->
   <queries>
     <package android:name="com.artix.launcher.ruffle" />
   </queries>
 
+  <!-- Bot services (one process per account, :bot0..:bot6) are declared by [Service] attributes
+       in BotServices.cs. -->
   <application
       android:label="Skua Mobile"
-      android:icon="@android:drawable/sym_def_app_icon"
+      android:icon="@mipmap/ic_launcher"
+      android:roundIcon="@mipmap/ic_launcher_round"
       android:allowBackup="false"
       android:largeHeap="true"
       android:usesCleartextTraffic="true">
-
-    <!-- Keeps Skua (scripts, login, relogin) alive while the game is in front. -->
-    <service
-        android:name="com.skua.mobile.SkuaService"
-        android:exported="false"
-        android:foregroundServiceType="specialUse">
-      <property
-          android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-          android:value="Runs the user's game automation scripts while the game app is in front." />
-    </service>
   </application>
 </manifest>

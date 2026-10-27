@@ -15,8 +15,8 @@ public class SwfProvider : ContentProvider
 
     public override ParcelFileDescriptor? OpenFile(Android.Net.Uri uri, string mode)
     {
-        string name = Path.GetFileName(uri.Path ?? SkuaRuntime.SwfFileName);
-        Java.IO.File file = new(Context!.FilesDir, name == SkuaRuntime.SwfFileName ? name : SkuaRuntime.SwfFileName);
+        string name = Path.GetFileName(uri.Path ?? AppFiles.SwfFileName);
+        Java.IO.File file = new(Context!.FilesDir, name == AppFiles.SwfFileName ? name : AppFiles.SwfFileName);
         return ParcelFileDescriptor.Open(file, ParcelFileMode.ReadOnly);
     }
 
