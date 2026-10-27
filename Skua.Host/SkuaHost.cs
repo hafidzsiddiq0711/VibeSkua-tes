@@ -74,8 +74,35 @@ public sealed class SkuaHost : IDisposable
         IClientFilesService clientFiles = provider.GetRequiredService<IClientFilesService>();
         clientFiles.CreateDirectories();
         clientFiles.CreateFiles();
+        PrepareDefaultFile("AdvancedSkills.json", ClientFileSources.SkuaAdvancedSkillsFile);
+        PrepareDefaultFile("QuestData.json", ClientFileSources.SkuaQuestsFile);
 
         return new SkuaHost(provider);
+    }
+
+    /// <summary>Folder with default data files (AdvancedSkills.json, QuestData.json); defaults to the app folder.</summary>
+    public static string? DefaultFilesDirectory { get; set; }
+
+    /// <summary>
+    /// CreateFiles leaves an empty file when the default isn't next to the exe (it always is on
+    /// desktop). Fill it from the shipped copy, or delete it so Skua downloads it from GitHub.
+    /// </summary>
+    private static void PrepareDefaultFile(string name, string target)
+    {
+        try
+        {
+            if (File.Exists(target) && new FileInfo(target).Length > 0)
+                return;
+            string source = Path.Combine(DefaultFilesDirectory ?? AppContext.BaseDirectory, name);
+            if (File.Exists(source))
+                File.Copy(source, target, true);
+            else if (File.Exists(target))
+                File.Delete(target);
+        }
+        catch (Exception e)
+        {
+            Trace.WriteLine($"Could not prepare {name}: {e.Message}");
+        }
     }
 
     /// <summary>Same registrations as Skua.App.Avalonia's AddScriptableObjects.</summary>

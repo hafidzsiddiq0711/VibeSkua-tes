@@ -43,7 +43,7 @@ public class ClientFilesService : IClientFilesService
             if (File.Exists(rootAdvancedSkillsFile))
                 File.Copy(rootAdvancedSkillsFile, ClientFileSources.SkuaAdvancedSkillsFile);
             else
-                File.Create(ClientFileSources.SkuaAdvancedSkillsFile);
+                File.Create(ClientFileSources.SkuaAdvancedSkillsFile).Dispose();
         }
 
         if (!File.Exists(ClientFileSources.SkuaQuestsFile))
@@ -52,7 +52,7 @@ public class ClientFilesService : IClientFilesService
             if (File.Exists(rootQuestsFile))
                 File.Copy(rootQuestsFile, ClientFileSources.SkuaQuestsFile);
             else
-                File.Create(ClientFileSources.SkuaQuestsFile);
+                File.Create(ClientFileSources.SkuaQuestsFile).Dispose();
         }
 
         if (!File.Exists(ClientFileSources.SkuaJunkItemsFile))

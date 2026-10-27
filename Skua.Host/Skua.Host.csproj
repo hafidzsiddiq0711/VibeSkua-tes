@@ -10,6 +10,12 @@
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
+  <!-- Default data files the desktop app ships next to its exe (Skua.Core expects them). -->
+  <ItemGroup>
+    <Content Include="..\Skua.App.Avalonia\AdvancedSkills.json" Link="AdvancedSkills.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Skua.App.Avalonia\QuestData.json" Link="QuestData.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Skua.Core\Skua.Core.csproj" />
     <ProjectReference Include="..\Skua.Core.Interfaces\Skua.Core.Interfaces.csproj" />
