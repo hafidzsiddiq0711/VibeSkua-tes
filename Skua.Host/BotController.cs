@@ -127,7 +127,8 @@ public sealed class BotController : IDisposable
     }
 
     private static string ScriptPath(string relative) =>
-        Path.IsPathRooted(relative) ? relative : Path.Combine(SkuaHost.ScriptsDirectory, relative);
+        Path.IsPathRooted(relative) ? relative
+            : Path.Combine(SkuaHost.ScriptsDirectory, relative.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar));
 
     // ------------------------------------------------------------------ Skua options
 
@@ -417,6 +418,24 @@ public sealed class BotController : IDisposable
             case "scriptOptions.set":
                 SaveScriptOptions(req.Value<string>("script") ?? _profile.Script, (JObject?)req["values"] ?? new JObject());
                 return null;
+            case "cbo.get":
+                return JObject.FromObject(OptionCatalog.ReadCbo(req.Value<string>("user") ?? _profile.Username));
+            case "cbo.set":
+                OptionCatalog.WriteCbo(req.Value<string>("user") ?? _profile.Username,
+                    req["values"]?.ToObject<Dictionary<string, string>>() ?? new());
+                return null;
+            case "scripts.list":
+            {
+                // Scripts on this machine (a phone managing a server picks from the server's).
+                string dir = SkuaHost.ScriptsDirectory;
+                if (!Directory.Exists(dir))
+                    return new JArray();
+                return new JArray(Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
+                    .Select(f => Path.GetRelativePath(dir, f).Replace('\\', '/'))
+                    .Where(f => !f.StartsWith("Core", StringComparison.OrdinalIgnoreCase) && !f.StartsWith("Cached-Scripts", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                    .Select(f => (object)f).ToArray());
+            }
             case "headless.start":
                 if (Headless is null)
                     throw new InvalidOperationException("Headless mode isn't available here.");

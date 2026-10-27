@@ -6,20 +6,39 @@ using System.Text;
 
 namespace Skua.Host;
 
-/// <summary>Manager side of <see cref="BotController"/>: one connection to one bot, reconnecting on demand.</summary>
+/// <summary>
+/// Manager side of <see cref="BotController"/>: one connection to one bot, reconnecting on demand.
+/// Through a Skua Server the same client reaches a bot on another machine: every request then
+/// carries the server's token and the bot's slot.
+/// </summary>
 public sealed class BotClient : IDisposable
 {
+    private readonly string _host;
     private readonly int _port;
+    private readonly string? _token;
+    private readonly bool _viaServer;
     private readonly SemaphoreSlim _connectLock = new(1, 1);
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JObject>> _pending = new();
     private TcpClient? _tcp;
     private StreamWriter? _writer;
     private long _nextId;
 
+    /// <summary>A bot on this device.</summary>
     public BotClient(int slot)
     {
         Slot = slot;
+        _host = "127.0.0.1";
         _port = BotController.ControlPort(slot);
+    }
+
+    /// <summary>Bot <paramref name="slot"/> of the Skua Server at host:port.</summary>
+    public BotClient(string host, int port, string token, int slot)
+    {
+        Slot = slot;
+        _host = host;
+        _port = port;
+        _token = token;
+        _viaServer = true;
     }
 
     public int Slot { get; }
@@ -36,7 +55,11 @@ public sealed class BotClient : IDisposable
                 return;
             Drop();
             TcpClient tcp = new() { NoDelay = true };
-            await tcp.ConnectAsync("127.0.0.1", _port, token);
+            using (CancellationTokenSource connect = CancellationTokenSource.CreateLinkedTokenSource(token))
+            {
+                connect.CancelAfter(8000);
+                await tcp.ConnectAsync(_host, _port, connect.Token);
+            }
             NetworkStream stream = tcp.GetStream();
             _writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
             _tcp = tcp;
@@ -76,7 +99,7 @@ public sealed class BotClient : IDisposable
         _writer = null;
         foreach (var kv in _pending)
             if (_pending.TryRemove(kv.Key, out var tcs))
-                tcs.TrySetException(new IOException("Bot terputus."));
+                tcs.TrySetException(new IOException("Bot disconnected."));
     }
 
     /// <summary>Send a command; returns "data" or throws with the bot's error.</summary>
@@ -87,6 +110,11 @@ public sealed class BotClient : IDisposable
         JObject req = args is null ? new JObject() : (JObject)args.DeepClone();
         req["id"] = id;
         req["cmd"] = cmd;
+        if (_viaServer)
+        {
+            req["token"] = _token;
+            req["slot"] = Slot;
+        }
         TaskCompletionSource<JObject> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[id] = tcs;
         try
@@ -103,11 +131,11 @@ public sealed class BotClient : IDisposable
         if (done != tcs.Task)
         {
             _pending.TryRemove(id, out _);
-            throw new TimeoutException($"Bot #{Slot} tidak menjawab '{cmd}'.");
+            throw new TimeoutException($"Bot #{Slot} didn't answer '{cmd}'.");
         }
         JObject reply = await tcs.Task;
         if (reply.Value<bool?>("ok") != true)
-            throw new InvalidOperationException(reply.Value<string>("error") ?? "gagal");
+            throw new InvalidOperationException(reply.Value<string>("error") ?? "failed");
         return reply["data"];
     }
 

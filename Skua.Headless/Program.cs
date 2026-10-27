@@ -31,9 +31,14 @@ switch (command)
         return await Bot();
     case "e2e":
         return await EndToEnd();
+    case "server":
+        return await Server();
+    case "servertest":
+        return await ServerTest();
     default:
         Console.WriteLine("usage: skua-headless selftest [--refs DIR] [--with-scripts]");
         Console.WriteLine("       skua-headless run --user U --pass P [--server S] [--script PATH] [--endpoint listen:5150] [--update-scripts]");
+        Console.WriteLine("       skua-headless server        (Skua Server for Skua Mobile; settings in server.json)");
         return 2;
 }
 
@@ -185,12 +190,20 @@ async Task<int> SelfTest()
     }
 }
 
-// skua-headless bot --slot N : one account controlled by a manager (control 6150+N, game 5150+N).
+string DefaultRuffle() => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "skua-ruffle.exe" : "skua-ruffle");
+string DefaultSwf() => Path.Combine(AppContext.BaseDirectory, "skua-mobile.swf");
+
+// skua-headless bot --slot N [--ruffle PATH] [--swf PATH]
+//   One account controlled by a manager (control 6150+N, game 5150+N, both on 127.0.0.1).
 async Task<int> Bot()
 {
     int slot = int.Parse(Arg("--slot", "1"));
-    using SkuaHost host = SkuaHost.Create($"listen:{BotController.GamePort(slot)}");
-    using BotController bot = new(host, slot);
+    string ruffle = Arg("--ruffle", DefaultRuffle()), swf = Arg("--swf", DefaultSwf());
+    using SkuaHost host = SkuaHost.Create($"listen-local:{BotController.GamePort(slot)}");
+    using BotController bot = new(host, slot)
+    {
+        Headless = File.Exists(ruffle) && File.Exists(swf) ? new ProcessHeadlessGame(ruffle, swf) : null,
+    };
     host.Log += line => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}");
     TaskCompletionSource quit = new();
     bot.ShutdownRequested += () => quit.TrySetResult();
@@ -198,7 +211,116 @@ async Task<int> Bot()
     host.Start();
     bot.StartControlServer();
     await quit.Task;
+    bot.Headless?.Stop();
     return 0;
+}
+
+ProcessStartInfo BotProcess(int slot, string ruffle, string swf)
+{
+    string exe = Environment.ProcessPath!;
+    ProcessStartInfo info = new(exe);
+    if (Path.GetFileNameWithoutExtension(exe) == "dotnet")
+        info.ArgumentList.Add(typeof(ServerConfig).Assembly.Location);
+    foreach (string a in new[] { "bot", "--slot", slot.ToString(), "--ruffle", ruffle, "--swf", swf })
+        info.ArgumentList.Add(a);
+    return info;
+}
+
+// skua-headless server : Skua Server (bots of this machine for Skua Mobile), see server.json.
+async Task<int> Server()
+{
+    string configPath = Path.Combine(AppContext.BaseDirectory, "server.json");
+    ServerConfig config = ServerConfig.LoadOrCreate(configPath, out bool created);
+    string ruffle = Arg("--ruffle", DefaultRuffle()), swf = Arg("--swf", DefaultSwf());
+    using SkuaServer server = new(config, slot => BotProcess(slot, ruffle, swf), Path.Combine(AppContext.BaseDirectory, "logs"));
+    server.Start();
+    Console.WriteLine("==============================================================");
+    Console.WriteLine($"  Skua Server \"{config.Name}\" is running on port {config.Port}.");
+    Console.WriteLine($"  Token: {config.Token}");
+    Console.WriteLine("  In Skua Mobile: menu -> Servers -> Add, then enter this PC's");
+    Console.WriteLine("  Tailscale IP, the port and the token above.");
+    if (!File.Exists(ruffle))
+        Console.WriteLine($"  WARNING: {ruffle} is missing: headless games can't start.");
+    Console.WriteLine("  Keep this window open (or use install-autostart.bat).");
+    Console.WriteLine("==============================================================");
+    if (created)
+        Console.WriteLine($"(A new token was saved in {configPath}.)");
+    TaskCompletionSource quit = new();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; quit.TrySetResult(); };
+    await quit.Task;
+    return 0;
+}
+
+// skua-headless servertest [--ruffle PATH --swf PATH] : the server as Skua Mobile uses it (CI).
+async Task<int> ServerTest()
+{
+    ServerConfig config = new() { Bind = "127.0.0.1", Port = 6199, Token = "test-token", MaxSlots = 4 };
+    string ruffle = Arg("--ruffle", DefaultRuffle()), swf = Arg("--swf", DefaultSwf());
+    using SkuaServer server = new(config, slot => BotProcess(slot, ruffle, swf), Path.Combine(Path.GetTempPath(), "skua-server-test-logs"));
+    server.Start();
+    int fails = 0;
+    async Task Check(string label, Func<Task<bool>> test)
+    {
+        try
+        {
+            bool ok = await test();
+            Console.WriteLine($"{(ok ? "[OK]  " : "[FAIL]")} server {label}");
+            if (!ok) fails++;
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"[FAIL] server {label}: {e.Message}");
+            fails++;
+        }
+    }
+    using BotClient wrong = new("127.0.0.1", 6199, "nope", 3);
+    using BotClient bot = new("127.0.0.1", 6199, "test-token", 3);
+    await Check("rejects a wrong token", async () =>
+    {
+        try { await wrong.SendAsync("server.info"); return false; }
+        catch (InvalidOperationException e) { return e.Message.Contains("token"); }
+    });
+    await Check("server.info", async () => (await bot.SendAsync("server.info"))?.Value<int>("maxSlots") == 4);
+    await Check("status of a stopped bot doesn't start it", async () =>
+    {
+        try { await bot.SendAsync("status"); return false; }
+        catch (InvalidOperationException e) { return e.Message.Contains("isn't running"); }
+    });
+    await Check("configure starts bot 3", async () =>
+    {
+        BotProfile profile = new() { Username = "servertest", AutoLogin = false };
+        await bot.SendAsync("configure", new Newtonsoft.Json.Linq.JObject { ["profile"] = Newtonsoft.Json.Linq.JObject.FromObject(profile) }, 150000);
+        await Task.Delay(2500);
+        return (await bot.SendAsync("status"))?.Value<string>("profileUser") == "servertest";
+    });
+    await Check("scripts.list", async () => (await bot.SendAsync("scripts.list")) is Newtonsoft.Json.Linq.JArray);
+    if (File.Exists(ruffle))
+    {
+        await Check("headless game on the server loads AQW", async () =>
+        {
+            await bot.SendAsync("headless.start");
+            for (int i = 0; i < 120; i++)
+            {
+                await Task.Delay(1000);
+                var status = await bot.SendAsync("status");
+                if (status?.Value<bool?>("loaded") == true)
+                {
+                    Console.WriteLine($"       status: {status.ToString(Newtonsoft.Json.Formatting.None)}");
+                    return true;
+                }
+            }
+            return false;
+        });
+    }
+    await Check("shutdown", async () =>
+    {
+        await bot.SendAsync("shutdown");
+        await Task.Delay(1500);
+        var info = await bot.SendAsync("server.info");
+        return info?["running"]?.Any() != true;
+    });
+    Console.WriteLine(fails == 0 ? "SERVERTEST OK" : $"SERVERTEST FAILED ({fails})");
+    return fails == 0 ? 0 : 1;
 }
 
 // skua-headless e2e --ruffle PATH --swf PATH [--timeout 240]
@@ -295,7 +417,7 @@ async Task<int> Run()
 }
 
 
-/// <summary>Headless game as a skua-ruffle process (Linux).</summary>
+/// <summary>Headless game as a skua-ruffle process (Linux, Windows).</summary>
 sealed class ProcessHeadlessGame(string ruffle, string swf) : IHeadlessGame
 {
     private Process? _process;
@@ -304,9 +426,12 @@ sealed class ProcessHeadlessGame(string ruffle, string swf) : IHeadlessGame
 
     public bool Start(int gamePort)
     {
-        ProcessStartInfo info = new(ruffle) { RedirectStandardError = true, UseShellExecute = false };
+        // stdin stays open while this bot lives; skua-ruffle quits when it closes, so a crashed
+        // bot never leaves a game behind that would fight the next one for its port.
+        ProcessStartInfo info = new(ruffle) { RedirectStandardError = true, RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true };
         info.ArgumentList.Add(swf);
         info.ArgumentList.Add($"127.0.0.1:{gamePort}");
+        info.ArgumentList.Add("--until-stdin-closes");
         _process = Process.Start(info);
         if (_process is null)
             return false;

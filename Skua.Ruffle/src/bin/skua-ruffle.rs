@@ -1,12 +1,15 @@
-//! skua-ruffle <skua-mobile.swf> <skuaHost> [seconds]
-//! Runs the game headless on Linux (CI end-to-end test, servers). Stops after `seconds` if given.
+//! skua-ruffle <skua-mobile.swf> <skuaHost> [seconds] [--until-stdin-closes]
+//! Runs the game headless (CI end-to-end test, Skua Server). Stops after `seconds` if given, or
+//! with --until-stdin-closes when the parent (the bot) goes away.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 fn main() {
     skua_ruffle::init_logging(None);
-    let mut args = std::env::args().skip(1);
+    let all: Vec<String> = std::env::args().skip(1).collect();
+    let watch_stdin = all.iter().any(|a| a == "--until-stdin-closes");
+    let mut args = all.into_iter().filter(|a| !a.starts_with("--"));
     let swf_path = args.next().expect("usage: skua-ruffle <skua-mobile.swf> <skuaHost> [seconds]");
     let skua_host = args.next().unwrap_or_else(|| "127.0.0.1:5150".into());
     let seconds: Option<u64> = args.next().and_then(|s| s.parse().ok());
@@ -16,6 +19,14 @@ fn main() {
         let stop = stop.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(seconds));
+            stop.store(true, Ordering::Relaxed);
+        });
+    }
+    if watch_stdin {
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            let mut sink = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut std::io::stdin(), &mut sink);
             stop.store(true, Ordering::Relaxed);
         });
     }

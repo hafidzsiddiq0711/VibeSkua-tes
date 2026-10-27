@@ -115,6 +115,12 @@ jobs:
           dotnet out/headless/skua-headless.dll e2e --ruffle Skua.Ruffle/target/release/skua-ruffle \
             --swf tools/remote-poc/skua-mobile.swf --timeout 300 2>&1 | tee e2e.log
 
+      - name: Skua Server - remote manager protocol, bots started on demand, headless on the server
+        run: |
+          set -o pipefail
+          dotnet out/headless/skua-headless.dll servertest --ruffle Skua.Ruffle/target/release/skua-ruffle \
+            --swf tools/remote-poc/skua-mobile.swf 2>&1 | tee servertest.log
+
       - name: Report end-to-end output as annotation
         if: always()
         run: |
@@ -122,7 +128,70 @@ jobs:
           lines = open("e2e.log", encoding="utf-8", errors="replace").read().splitlines() if __import__("os").path.exists("e2e.log") else []
           tail = "\n".join(lines[-45:]).replace("%", "%25").replace("\n", "%0A")
           print(f"::notice title=e2e::{tail}")
+          import os
+          if os.path.exists("servertest.log"):
+              lines = open("servertest.log", encoding="utf-8", errors="replace").read().splitlines()
+              keep = [l for l in lines if "server " in l or "SERVERTEST" in l or "status:" in l]
+              print("::notice title=servertest::" + "\n".join(keep[-30:]).replace("%", "%25").replace("\n", "%0A"))
           PY
+
+  server-windows:
+    name: Skua Server for Windows (headless bots on a PC/VPS)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ruffle sources with Skua's patches
+        run: |
+          set -e
+          REV=$(grep -o 'rev = "[0-9a-f]*"' Skua.Ruffle/Cargo.toml | head -1 | cut -d'"' -f2)
+          git init -q ruffle-src
+          git -C ruffle-src remote add origin https://github.com/ruffle-rs/ruffle.git
+          git -C ruffle-src fetch -q --depth 1 origin "$REV"
+          git -C ruffle-src checkout -q FETCH_HEAD
+          for p in tools/ruffle-patches/*.patch; do git -C ruffle-src apply "../$p"; done
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Skua.Ruffle
+
+      - name: Build skua-ruffle.exe
+        run: cargo build --release --manifest-path Skua.Ruffle/Cargo.toml --bin skua-ruffle
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Package SkuaServer-win-x64.zip
+        run: |
+          set -e
+          dotnet publish Skua.Headless/Skua.Headless.csproj -c Release -r win-x64 --self-contained true -o SkuaServer
+          cp Skua.Ruffle/target/release/skua-ruffle.exe tools/remote-poc/skua-mobile.swf SkuaServer/
+          cp tools/skua-server/* SkuaServer/
+          cp Skua.App.Avalonia/AdvancedSkills.json Skua.App.Avalonia/QuestData.json SkuaServer/ 2>/dev/null || true
+          7z a -tzip SkuaServer-win-x64.zip SkuaServer >/dev/null
+          ls -la SkuaServer-win-x64.zip
+
+      - name: Smoke test on Windows (server answers, rejects a wrong token)
+        run: |
+          set -e
+          ./SkuaServer/skua-headless.exe servertest 2>&1 | tee servertest-win.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skua-server-windows
+          path: SkuaServer-win-x64.zip
 
   windows-app:
     name: Desktop app still builds (RemoteFlashUtil moved to Skua.Core)
@@ -137,7 +206,7 @@ jobs:
 
   android:
     name: Skua Mobile APK
-    needs: ruffle
+    needs: [ruffle, server-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -206,13 +275,18 @@ jobs:
           name: SkuaMobile-apk
           path: apk/*.apk
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: skua-server-windows
+          path: apk
+
       - name: Publish as release "skua-mobile-latest" (direct download link for phones)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG=skua-mobile-latest
           gh release delete "$TAG" --yes --cleanup-tag || true
-          gh release create "$TAG" apk/SkuaMobile.apk \
+          gh release create "$TAG" apk/SkuaMobile.apk apk/SkuaServer-win-x64.zip \
             --target "${{ github.sha }}" --prerelease \
             --title "Skua Mobile (latest build)" \
-            --notes "Automatic build of ${{ github.sha }}. Download SkuaMobile.apk and install it on the phone."
+            --notes "Automatic build of ${{ github.sha }}. SkuaMobile.apk: the phone app. SkuaServer-win-x64.zip: headless bots on a Windows PC/VPS, controlled from the phone (see README.txt inside)."
