@@ -60,3 +60,6 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# Remote PoC launcher: cmd.exe needs CRLF
+tools/remote-poc/*.bat text eol=crlf
