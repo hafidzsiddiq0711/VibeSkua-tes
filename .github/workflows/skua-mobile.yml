@@ -69,6 +69,8 @@ jobs:
     name: Skua Mobile APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write   # publish the APK as a GitHub Release (direct download link)
     steps:
       - uses: actions/checkout@v4
 
@@ -120,10 +122,21 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p apk
-          find Skua.Mobile/bin/Release -name "*-Signed.apk" -exec cp {} apk/ \;
+          find Skua.Mobile/bin/Release -name "*-Signed.apk" -exec cp {} apk/SkuaMobile.apk \;
           ls -la apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: SkuaMobile-apk
           path: apk/*.apk
+
+      - name: Publish as release "skua-mobile-latest" (direct download link for phones)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=skua-mobile-latest
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" apk/SkuaMobile.apk \
+            --target "${{ github.sha }}" --prerelease \
+            --title "Skua Mobile (build terbaru)" \
+            --notes "Build otomatis dari commit ${{ github.sha }}. Unduh SkuaMobile.apk lalu install di HP (izinkan install dari sumber tidak dikenal). Butuh Artix Games Launcher."
