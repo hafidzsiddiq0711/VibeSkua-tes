@@ -191,7 +191,7 @@ public class MainActivity : Activity
 
     private void CopyLog()
     {
-        ClipboardManager clipboard = (ClipboardManager)GetSystemService(ClipboardService)!;
+        Android.Content.ClipboardManager clipboard = (Android.Content.ClipboardManager)GetSystemService(ClipboardService)!;
         clipboard.PrimaryClip = ClipData.NewPlainText("Skua Mobile log", string.Join("\n", SkuaRuntime.LogSnapshot()));
         Toast("Log disalin. Tempel (paste) ke chat.");
     }
