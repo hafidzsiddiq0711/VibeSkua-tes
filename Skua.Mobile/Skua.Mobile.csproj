@@ -30,7 +30,7 @@
 
   <ItemGroup>
     <!-- refs.zip (reference assemblies for the script compiler) is produced by CI. -->
-    <AndroidAsset Include="Assets\**\*" />
+    <AndroidAsset Include="Assets\**\*" Exclude="Assets\README.txt" />
   </ItemGroup>
 
 </Project>
