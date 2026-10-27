@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # User-writable .NET so `dotnet workload install` needs no sudo.
+  DOTNET_INSTALL_DIR: ${{ github.workspace }}/../dotnet
+
 jobs:
   headless:
     name: Skua headless on Linux (build + compiler selftest)
@@ -60,3 +64,66 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet build Skua.App.Avalonia/Skua.App.Avalonia.csproj -c Release
+
+  android:
+    name: Skua Mobile APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android workload
+        run: dotnet workload install android
+
+      - name: Build Skua.Headless (its DLLs become the script compiler's references)
+        run: dotnet build Skua.Headless/Skua.Headless.csproj -c Release -o out/headless
+
+      - name: Pack app assets (refs.zip, skua-mobile.swf, default data)
+        run: |
+          set -e
+          DOTNET_ROOT=$(dirname "$(readlink -f "$(which dotnet)")")
+          REF=$(ls -d "$DOTNET_ROOT"/packs/Microsoft.NETCore.App.Ref/10.*/ref/net10.0 | sort -V | tail -1)
+          echo "reference pack: $REF"
+          mkdir -p refs
+          cp "$REF"/*.dll refs/
+          for f in out/headless/*.dll; do b=$(basename "$f"); [ -e "refs/$b" ] || cp "$f" refs/; done
+          rm -f refs/skua-headless.dll
+          (cd refs && zip -q -9 ../Skua.Mobile/Assets/refs.zip *.dll)
+          ls -la Skua.Mobile/Assets/refs.zip
+          cp tools/remote-poc/skua-mobile.swf Skua.Mobile/Assets/
+          cp Skua.App.Avalonia/AdvancedSkills.json Skua.App.Avalonia/QuestData.json Skua.Mobile/Assets/
+
+      - name: Android SDK dependencies
+        run: dotnet build Skua.Mobile/Skua.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:AcceptAndroidSDKLicenses=True -p:AndroidSdkDirectory="$ANDROID_HOME"
+
+      - name: Build APK
+        run: |
+          set -o pipefail
+          dotnet build Skua.Mobile/Skua.Mobile.csproj -c Release -p:AndroidSdkDirectory="$ANDROID_HOME" 2>&1 | tee android.log
+
+      - name: Report build errors as annotations
+        if: failure()
+        run: |
+          grep -E "error [A-Z]+[0-9]+|error :|: error" android.log | sort -u | head -40 | while IFS= read -r line; do
+            echo "::error title=android::${line//%/%25}"
+          done
+
+      - name: Collect APK
+        run: |
+          mkdir -p apk
+          find Skua.Mobile/bin/Release -name "*-Signed.apk" -exec cp {} apk/ \;
+          ls -la apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkuaMobile-apk
+          path: apk/*.apk

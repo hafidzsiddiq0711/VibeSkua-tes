@@ -25,7 +25,8 @@ namespace Skua.Core.Flash;
 /// Flash ActiveX. Enable with the environment variable SKUA_REMOTE_FLASH before starting Skua:
 /// <list type="bullet">
 /// <item><c>listen</c> (or <c>listen:5150</c>): wait for skua.swf to connect, e.g. skua.swf
-/// opened in the Artix Games Launcher (it uses flash.net.Socket there).</item>
+/// opened in the Artix Games Launcher (it uses flash.net.Socket there).
+/// <c>listen-local</c> accepts only connections from this device.</item>
 /// <item><c>192.168.1.23[:5150]</c>: connect to the phone running the "Ruffle Skua PoC" app.</item>
 /// </list>
 ///
@@ -59,6 +60,7 @@ public sealed class RemoteFlashUtil : IFlashUtil
     private readonly string _host;
     private readonly int _port;
     private readonly bool _listen;
+    private readonly bool _listenLocal;
     private long _generation;
 
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JToken?>> _pending = new();
@@ -87,7 +89,9 @@ public sealed class RemoteFlashUtil : IFlashUtil
         _messenger = messenger;
         _lazyManager = manager;
         (_host, _port) = ParseEndpoint(endpoint);
-        _listen = _host.Length == 0 || _host.Equals("listen", StringComparison.OrdinalIgnoreCase);
+        _listen = _host.Length == 0 || _host.StartsWith("listen", StringComparison.OrdinalIgnoreCase);
+        // "listen-local": only this device (e.g. Skua Mobile + Artix Launcher on the same phone).
+        _listenLocal = _host.Equals("listen-local", StringComparison.OrdinalIgnoreCase);
     }
 
     private static (string, int) ParseEndpoint(string endpoint)
@@ -150,7 +154,7 @@ public sealed class RemoteFlashUtil : IFlashUtil
         TcpListener listener;
         try
         {
-            listener = new TcpListener(System.Net.IPAddress.Any, _port);
+            listener = new TcpListener(_listenLocal ? System.Net.IPAddress.Loopback : System.Net.IPAddress.Any, _port);
             listener.Start();
         }
         catch (Exception ex)
