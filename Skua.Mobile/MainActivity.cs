@@ -284,9 +284,9 @@ public class MainActivity : Activity
                 await host.UpdateScriptsAsync(new Progress<string>(p =>
                 {
                     // Throttle progress spam.
-                    if (Environment.TickCount - last > 1500)
+                    if (System.Environment.TickCount - last > 1500)
                     {
-                        last = Environment.TickCount;
+                        last = System.Environment.TickCount;
                         SkuaRuntime.AddLog(p);
                     }
                 }));
