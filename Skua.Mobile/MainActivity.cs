@@ -28,6 +28,7 @@ public class MainActivity : Activity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
+        SkuaRuntime.InstallCrashLogging(this);
         _prefs = GetSharedPreferences("skua", FileCreationMode.Private)!;
         _ui = new Handler(Looper.MainLooper!);
         SetContentView(BuildUi());
@@ -88,8 +89,11 @@ public class MainActivity : Activity
             Button("Login", () => _ = LoginAsync(startScriptAfter: false)),
             Button("Start script", () => _ = StartScriptAsync()),
             Button("Stop", () => _ = StopScriptAsync())));
+        root.AddView(Row(
+            Button("Salin log", CopyLog)));
 
         _log = Label("", 11, 0xFFC8C8C8);
+        _log.SetTextIsSelectable(true);
         _log.SetTypeface(Typeface.Monospace, TypefaceStyle.Normal);
         _logScroll = new ScrollView(this);
         _logScroll.AddView(_log);
@@ -183,6 +187,13 @@ public class MainActivity : Activity
             .PutBoolean("autoLogin", _autoLogin.Checked)!
             .PutBoolean("autoStart", _autoStart.Checked)!
             .Apply();
+    }
+
+    private void CopyLog()
+    {
+        ClipboardManager clipboard = (ClipboardManager)GetSystemService(ClipboardService)!;
+        clipboard.PrimaryClip = ClipData.NewPlainText("Skua Mobile log", string.Join("\n", SkuaRuntime.LogSnapshot()));
+        Toast("Log disalin. Tempel (paste) ke chat.");
     }
 
     private void Toast(string text) => Android.Widget.Toast.MakeText(this, text, ToastLength.Long)!.Show();

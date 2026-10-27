@@ -60,8 +60,54 @@ public static class SkuaRuntime
             host.Start();
             Host = host;
             AddLog($"Skua siap. Folder script: {SkuaHost.ScriptsDirectory}");
+            Task.Run(() => CompilerCheck(host));
             return host;
         }
+    }
+
+    /// <summary>Compile a tiny script once so problems with the compiler setup show up in the log right away.</summary>
+    private static void CompilerCheck(SkuaHost host)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            object? script = host.CompileOnly("""
+                using Skua.Core.Interfaces;
+                public class Script
+                {
+                    public void ScriptMain(IScriptInterface bot) => bot.Log("ok");
+                }
+                """);
+            AddLog(script is null ? "Compiler: hasil kosong (?)" : $"Compiler OK ({sw.ElapsedMilliseconds} ms)");
+        }
+        catch (Exception e)
+        {
+            AddLog($"Compiler GAGAL: {e}");
+        }
+    }
+
+    /// <summary>Unhandled .NET exceptions go to the log (and logs.txt) instead of vanishing.</summary>
+    public static void InstallCrashLogging(Context context)
+    {
+        string crashFile = Path.Combine(context.FilesDir!.AbsolutePath, "crash.txt");
+        if (File.Exists(crashFile))
+        {
+            AddLog("Crash sebelumnya:\n" + File.ReadAllText(crashFile));
+            File.Delete(crashFile);
+        }
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            try { File.WriteAllText(crashFile, e.ExceptionObject?.ToString() ?? "?"); } catch { }
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            AddLog($"Task error: {e.Exception.GetBaseException().Message}");
+            e.SetObserved();
+        };
+        Android.Runtime.AndroidEnvironment.UnhandledExceptionRaiser += (_, e) =>
+        {
+            try { File.WriteAllText(crashFile, e.Exception?.ToString() ?? "?"); } catch { }
+        };
     }
 
     /// <summary>Copy APK assets to files/: the swf, default data, and the compiler references.</summary>
