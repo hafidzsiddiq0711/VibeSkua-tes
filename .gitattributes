@@ -63,3 +63,4 @@
 
 # Remote PoC launcher: cmd.exe needs CRLF
 tools/remote-poc/*.bat text eol=crlf
+*.bat text eol=crlf

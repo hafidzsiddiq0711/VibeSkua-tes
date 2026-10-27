@@ -20,7 +20,12 @@ public sealed class Account
     /// <summary>"watch": game in an Artix window; "headless": no window, lightest.</summary>
     public string Mode { get; set; } = "watch";
 
-    public bool Headless => Mode == "headless";
+    public bool Headless => Mode == "headless" || Remote;
+
+    /// <summary>Skua Server this account runs on ("" = this phone).</summary>
+    public string ServerId { get; set; } = "";
+
+    public bool Remote => ServerId.Length > 0;
     /// <summary>Skua options changed for this account (applied after login).</summary>
     public Dictionary<string, string> SkuaOptions { get; set; } = new();
 
@@ -145,4 +150,78 @@ public static class AccountStore
         File.WriteAllText(tmp, JsonSerializer.Serialize(_accounts, new JsonSerializerOptions { WriteIndented = true }));
         File.Move(tmp, _file, true);
     }
+}
+
+/// <summary>A Skua Server (PC/VPS) whose bots this phone manages.</summary>
+public sealed class RemoteServer
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Name { get; set; } = "VPS";
+    /// <summary>Address, normally the PC's Tailscale IP (100.x.y.z).</summary>
+    public string Host { get; set; } = "";
+    public int Port { get; set; } = 6100;
+    public string Token { get; set; } = "";
+}
+
+/// <summary>servers.json in the app's private storage.</summary>
+public static class ServerStore
+{
+    private static readonly object _lock = new();
+    private static List<RemoteServer> _servers = new();
+    private static string _file = "";
+
+    public static void Init(Context context)
+    {
+        lock (_lock)
+        {
+            if (_file.Length > 0)
+                return;
+            _file = Path.Combine(context.FilesDir!.AbsolutePath, "servers.json");
+            try
+            {
+                if (File.Exists(_file))
+                    _servers = JsonSerializer.Deserialize<List<RemoteServer>>(File.ReadAllText(_file)) ?? new();
+            }
+            catch { }
+        }
+    }
+
+    public static List<RemoteServer> All
+    {
+        get
+        {
+            lock (_lock)
+                return _servers.ToList();
+        }
+    }
+
+    public static RemoteServer? Find(string id)
+    {
+        lock (_lock)
+            return _servers.Find(s => s.Id == id);
+    }
+
+    public static void Upsert(RemoteServer server)
+    {
+        lock (_lock)
+        {
+            int i = _servers.FindIndex(s => s.Id == server.Id);
+            if (i >= 0)
+                _servers[i] = server;
+            else
+                _servers.Add(server);
+            Save();
+        }
+    }
+
+    public static void Remove(string id)
+    {
+        lock (_lock)
+        {
+            _servers.RemoveAll(s => s.Id == id);
+            Save();
+        }
+    }
+
+    private static void Save() => File.WriteAllText(_file, JsonSerializer.Serialize(_servers, new JsonSerializerOptions { WriteIndented = true }));
 }

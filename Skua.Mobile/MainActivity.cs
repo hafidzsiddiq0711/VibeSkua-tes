@@ -239,7 +239,7 @@ public class MainActivity : Activity
         meta.SetPadding(0, Ui.Dp(this, 2), 0, Ui.Dp(this, 6));
         body.AddView(meta);
 
-        Android.Widget.Button modeButton = Ui.Button(this, "", () => ToggleMode(account), sp: 12);
+        Android.Widget.Button modeButton = Ui.Button(this, "", () => ModeButton(account), sp: 12);
         LinearLayout buttons = Ui.Row(this,
             Ui.Button(this, "▶ Play", () => Play(account), primary: true, sp: 12),
             Ui.Button(this, "■ Stop", () => Send(account, "stop", "Script stopped."), sp: 12),
@@ -281,10 +281,20 @@ public class MainActivity : Activity
                 meta.Add($"bot {mb} MB");
             views.Meta.Text = string.Join("  ·  ", meta);
 
-            views.ModeChip.Text = account.Headless ? "HEADLESS" : "WINDOW";
-            views.ModeChip.SetTextColor(account.Headless ? Ui.Night : Ui.Info);
-            views.ModeChip.Background = Ui.Rounded(account.Headless ? Color.Argb(40, 180, 140, 255) : Color.Argb(40, 108, 196, 255), 20, this);
-            views.ModeButton.Text = account.Headless ? "Watch" : "Headless";
+            if (account.Remote)
+            {
+                views.ModeChip.Text = (ServerStore.Find(account.ServerId)?.Name ?? "SERVER").ToUpperInvariant();
+                views.ModeChip.SetTextColor(Ui.Gold);
+                views.ModeChip.Background = Ui.Rounded(Color.Argb(40, 253, 175, 45), 20, this);
+                views.ModeButton.Text = "Move";
+            }
+            else
+            {
+                views.ModeChip.Text = account.Headless ? "HEADLESS" : "WINDOW";
+                views.ModeChip.SetTextColor(account.Headless ? Ui.Night : Ui.Info);
+                views.ModeChip.Background = Ui.Rounded(account.Headless ? Color.Argb(40, 180, 140, 255) : Color.Argb(40, 108, 196, 255), 20, this);
+                views.ModeButton.Text = account.Headless ? "Watch" : "Headless";
+            }
         }
 
         ActivityManager am = (ActivityManager)GetSystemService(ActivityService)!;
@@ -293,7 +303,8 @@ public class MainActivity : Activity
         _freeRam.Text = $"{memory.AvailMem / 1e9:F1} / {memory.TotalMem / 1e9:F0} GB";
         _freeRam.SetTextColor(memory.LowMemory ? Ui.Bad : Ui.Text);
         _botRam.Text = botMb > 0 ? (botMb >= 1024 ? $"{botMb / 1024.0:F1} GB" : $"{botMb} MB") : "–";
-        _bots.Text = $"{BotHub.RunningCount} / {BotHub.MaxSlots}";
+        var (phoneBots, serverBots) = BotHub.RunningCount;
+        _bots.Text = serverBots > 0 ? $"{phoneBots} + {serverBots} VPS" : $"{phoneBots} / {BotHub.MaxSlots}";
 
         string engine = AppFiles.IsArtixSkuaInstalled(this) ? "Artix (Skua)" : AppFiles.IsArtixInstalled(this) ? "Artix (1 window)" : "no Artix";
         _subtitle.Text = $"v{AppFiles.VersionName(this)}  ·  {engine}  ·  headless ready";
@@ -316,11 +327,48 @@ public class MainActivity : Activity
         }
         if (!account.Headless && !CheckArtix())
             return;
-        if (!account.Headless && !AppFiles.IsArtixSkuaInstalled(this) && BotHub.RunningCount > 0 && BotHub.SlotOf(account) is null)
+        if (!account.Headless && !AppFiles.IsArtixSkuaInstalled(this) && BotHub.RunningCount.Phone > 0 && BotHub.SlotOf(account) is null)
             Ui.Toast(this, "Stock Artix runs one game at a time: the other window will freeze. Use Artix (Skua) or headless.");
         else
             Ui.Toast(this, account.Headless ? $"Starting {account.Title} headless …" : $"Starting {account.Title} …");
         Run(async () => await BotHub.PlayAsync(this, account), $"Play {account.Title}");
+    }
+
+    private void ModeButton(Account account)
+    {
+        if (account.Remote)
+            MoveAccount(account);
+        else
+            ToggleMode(account);
+    }
+
+    /// <summary>Run the account on the phone or on one of the servers.</summary>
+    private void MoveAccount(Account account)
+    {
+        List<(string Id, string Label)> places = new() { ("", "This phone") };
+        places.AddRange(ServerStore.All.Select(s => (s.Id, $"{s.Name} ({s.Host})")));
+        if (places.Count == 1)
+        {
+            Ui.Toast(this, "Add a Skua Server first (⋯ → Servers).");
+            return;
+        }
+        Ui.Dialog(this, $"Run {account.Title} on …")
+            .SetItems(places.Select(p => (p.Id == account.ServerId ? "✓ " : "") + p.Label).ToArray(), (_, e) =>
+            {
+                string target = places[e.Which].Id;
+                if (target == account.ServerId)
+                    return;
+                Ui.Toast(this, $"Moving {account.Title} …");
+                Run(async () =>
+                {
+                    bool wasRunning = BotHub.StateOf(account)?.Alive == true;
+                    await BotHub.MoveAsync(account, target);
+                    if (wasRunning)
+                        await BotHub.PlayAsync(this, account);
+                }, "Move account");
+            })!
+            .SetNegativeButton("Cancel", (_, _) => { })!
+            .Show();
     }
 
     private void ToggleMode(Account account)
@@ -352,7 +400,8 @@ public class MainActivity : Activity
         (string Label, Action Action)[] items =
         {
             ("Edit account", () => EditAccount(account)),
-            ("Choose script", () => PickScript(path =>
+            ("Run on phone / server …", () => MoveAccount(account)),
+            ("Choose script", () => PickScript(account, path =>
             {
                 account.Script = path;
                 AccountStore.Save();
@@ -379,6 +428,11 @@ public class MainActivity : Activity
 
     private void OpenGame(Account account)
     {
+        if (account.Remote)
+        {
+            Ui.Toast(this, "Server accounts play headless. Move it to the phone to watch it.");
+            return;
+        }
         if (account.Headless)
         {
             ToggleMode(account);
@@ -431,6 +485,12 @@ public class MainActivity : Activity
             serverButton.Text = $"Server: {server} ▾";
         }));
 
+        List<(string Id, string Label)> places = new() { ("", "This phone") };
+        places.AddRange(ServerStore.All.Select(s => (s.Id, $"Server: {s.Name}")));
+        Spinner where = new(this);
+        where.Adapter = new ArrayAdapter<string>(this, Android.Resource.Layout.SimpleSpinnerDropDownItem, places.Select(p => p.Label).ToList());
+        where.SetSelection(Math.Max(0, places.FindIndex(p => p.Id == account.ServerId)));
+
         string[] modes = { "Game window (watch it)", "Headless (no window, lightest)" };
         Spinner mode = new(this);
         mode.Adapter = new ArrayAdapter<string>(this, Android.Resource.Layout.SimpleSpinnerDropDownItem, modes);
@@ -451,7 +511,12 @@ public class MainActivity : Activity
         box.AddView(pass);
         box.AddView(group);
         box.AddView(serverButton, Ui.Margins(this, ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, 0, 8, 0, 4));
-        box.AddView(Ui.Caption(this, "How to play"));
+        if (places.Count > 1)
+        {
+            box.AddView(Ui.Caption(this, "Runs on"));
+            box.AddView(where);
+        }
+        box.AddView(Ui.Caption(this, "How to play (on the phone)"));
         box.AddView(mode);
         box.AddView(scale);
         if (!AppFiles.IsArtixSkuaInstalled(this))
@@ -472,8 +537,23 @@ public class MainActivity : Activity
                 account.AutoStart = autoStart.Checked;
                 account.RenderScale = scales[Math.Clamp(scale.SelectedItemPosition, 0, scales.Length - 1)];
                 bool headless = mode.SelectedItemPosition == 1;
-                bool modeChanged = headless != account.Headless;
+                string target = places[Math.Clamp(where.SelectedItemPosition, 0, places.Count - 1)].Id;
+                if (existing is null)
+                    account.ServerId = target;
+                bool modeChanged = !account.Remote && headless != account.Headless;
                 AccountStore.Upsert(account);
+                if (target != account.ServerId)
+                {
+                    Ui.Toast(this, $"Moving {account.Title} …");
+                    Run(async () =>
+                    {
+                        bool wasRunning = BotHub.StateOf(account)?.Alive == true;
+                        await BotHub.MoveAsync(account, target);
+                        if (wasRunning)
+                            await BotHub.PlayAsync(this, account);
+                    }, "Move account");
+                    return;
+                }
                 Reconfigure(account);
                 if (modeChanged)
                 {
@@ -559,6 +639,24 @@ public class MainActivity : Activity
             Ui.Toast(this, "Add the username first: CoreBots options are saved per username.");
             return;
         }
+        const string note = "Same as CoreBots Options in VibeSkua on PC (the CBO_Storage file). Class names must match the game exactly, e.g. \"Legion Revenant\".";
+        if (account.Remote)
+        {
+            // The CBO file lives on the server.
+            Run(async () =>
+            {
+                BotClient server = await BotHub.HelperAsync(account);
+                Dictionary<string, string> remote = (await server.SendAsync("cbo.get", new JObject { ["user"] = account.User }, 150000))?
+                    .ToObject<Dictionary<string, string>>() ?? new();
+                _ui.Post(() => Ui.ShowOptions(this, $"CoreBots options · {account.User}", OptionCatalog.CoreBotsOptions, remote, result =>
+                    Run(async () =>
+                    {
+                        await server.SendAsync("cbo.set", new JObject { ["user"] = account.User, ["values"] = JObject.FromObject(result) }, 60000);
+                        _ui.Post(() => Ui.Toast(this, "CoreBots options saved on the server."));
+                    }, "CoreBots options"), note));
+            }, "CoreBots options");
+            return;
+        }
         Dictionary<string, string> values = OptionCatalog.ReadCbo(account.User);
         Ui.ShowOptions(this, $"CoreBots options · {account.User}", OptionCatalog.CoreBotsOptions, values, result =>
         {
@@ -571,7 +669,7 @@ public class MainActivity : Activity
             {
                 Ui.Toast(this, $"Could not save: {e.Message}");
             }
-        }, "Same as CoreBots Options in VibeSkua on PC (the CBO_Storage file). Class names must match the game exactly, e.g. \"Legion Revenant\".");
+        }, note);
     }
 
     private void ScriptOptions(Account account)
@@ -584,7 +682,7 @@ public class MainActivity : Activity
         Ui.Toast(this, "Reading the script's options (compiling first, up to a minute) …");
         Run(async () =>
         {
-            BotClient bot = await BotHub.HelperAsync();
+            BotClient bot = await BotHub.HelperAsync(account);
             JArray items = (JArray)(await bot.SendAsync("scriptOptions.get", new JObject { ["script"] = account.Script }, 300000))!;
             if (items.Count == 0)
             {
@@ -618,6 +716,7 @@ public class MainActivity : Activity
     {
         (string Label, Action Action)[] items =
         {
+            ("Servers (PC / VPS)", ManageServers),
             ("Update scripts", UpdateScripts),
             ("Script for this group", ScriptToGroup),
             ("Eco preset for this group", () => ApplyEco(Visible())),
@@ -792,7 +891,8 @@ public class MainActivity : Activity
         List<Account> accounts = Visible();
         if (accounts.Count == 0)
             return;
-        PickScript(path =>
+        Account? place = accounts.Select(a => a.ServerId).Distinct().Count() == 1 ? accounts[0] : null;
+        PickScript(place, path =>
         {
             Ui.Dialog(this, System.IO.Path.GetFileNameWithoutExtension(path))
                 .SetMessage($"Use this script for {accounts.Count} account(s) ({_group})?")!
@@ -836,6 +936,101 @@ public class MainActivity : Activity
             _ui.Post(() => Ui.Toast(this, $"Scripts updated: {count} file(s)."));
             AppLog.Add($"Scripts updated: {count} file(s).");
         }, "Update scripts");
+        // Servers keep their own copy of the scripts.
+        foreach (RemoteServer server in ServerStore.All)
+        {
+            Run(async () =>
+            {
+                JToken? count = await BotHub.ServerHelper(server).SendAsync("updateScripts", null, 30 * 60 * 1000);
+                AppLog.Add($"Scripts updated on {server.Name}: {count} file(s).");
+            }, $"Update scripts on {server.Name}");
+        }
+    }
+
+    // ------------------------------------------------------------------ servers
+
+    private void ManageServers()
+    {
+        List<RemoteServer> servers = ServerStore.All;
+        List<string> items = servers.Select(s => $"{s.Name}  ·  {s.Host}:{s.Port}").ToList();
+        items.Add("+ Add a server");
+        Ui.Dialog(this, "Skua Servers")
+            .SetItems(items.ToArray(), (_, e) =>
+            {
+                if (e.Which == servers.Count)
+                    EditServer(null);
+                else
+                    ServerMenu(servers[e.Which]);
+            })!
+            .SetNegativeButton("Close", (_, _) => { })!
+            .Show();
+    }
+
+    private void ServerMenu(RemoteServer server)
+    {
+        (string Label, Action Action)[] items =
+        {
+            ("Test connection", () => TestServer(server)),
+            ("Edit", () => EditServer(server)),
+            ("Remove", () =>
+            {
+                if (AccountStore.All.Any(a => a.ServerId == server.Id))
+                {
+                    Ui.Toast(this, "Move its accounts to the phone or another server first.");
+                    return;
+                }
+                ServerStore.Remove(server.Id);
+                RebuildList();
+            }),
+        };
+        Ui.Dialog(this, server.Name)
+            .SetItems(items.Select(i => i.Label).ToArray(), (_, e) => items[e.Which].Action())!
+            .SetNegativeButton("Close", (_, _) => { })!
+            .Show();
+    }
+
+    private void TestServer(RemoteServer server)
+    {
+        Ui.Toast(this, $"Connecting to {server.Host}:{server.Port} …");
+        Run(async () =>
+        {
+            JObject info = await BotHub.ServerInfoAsync(server);
+            int running = info["running"]?.Count() ?? 0;
+            string text = $"{info.Value<string>("name")}: {info.Value<string>("os")}\n" +
+                          $"{info.Value<int>("cpus")} CPUs, {info.Value<long>("memoryMb") / 1024.0:F0} GB RAM\n" +
+                          $"{running} bot(s) running, up to {info.Value<int>("maxSlots")}";
+            _ui.Post(() => Ui.Dialog(this, "Connected ✓").SetMessage(text)!.SetPositiveButton("OK", (_, _) => { })!.Show());
+        }, "Server");
+    }
+
+    private void EditServer(RemoteServer? existing)
+    {
+        RemoteServer server = existing ?? new RemoteServer();
+        LinearLayout box = new(this) { Orientation = Orientation.Vertical };
+        box.SetPadding(Ui.Dp(this, 20), Ui.Dp(this, 8), Ui.Dp(this, 20), 0);
+        box.AddView(Ui.Label(this, "Run SkuaServer on the PC/VPS (start-skua-server.bat). Use its Tailscale IP, and the token shown in its window.", 12, Ui.Muted));
+        EditText name = Ui.Field(this, "Name (e.g. VPS)", server.Name);
+        EditText host = Ui.Field(this, "Address (Tailscale IP, e.g. 100.101.102.103)", server.Host, InputTypes.ClassText | InputTypes.TextVariationUri);
+        EditText port = Ui.Field(this, "Port", server.Port.ToString(), InputTypes.ClassNumber);
+        EditText token = Ui.Field(this, "Token", server.Token, InputTypes.ClassText | InputTypes.TextVariationVisiblePassword);
+        box.AddView(name);
+        box.AddView(host);
+        box.AddView(port);
+        box.AddView(token);
+        Ui.Dialog(this, existing is null ? "Add a server" : "Edit server")
+            .SetView(box)!
+            .SetPositiveButton("Save & test", (_, _) =>
+            {
+                server.Name = string.IsNullOrWhiteSpace(name.Text) ? "Server" : name.Text!.Trim();
+                server.Host = host.Text?.Trim() ?? "";
+                server.Port = int.TryParse(port.Text, out int p) ? p : 6100;
+                server.Token = token.Text?.Trim() ?? "";
+                ServerStore.Upsert(server);
+                RebuildList();
+                TestServer(server);
+            })!
+            .SetNegativeButton("Cancel", (_, _) => { })!
+            .Show();
     }
 
     // ------------------------------------------------------------------ pickers
@@ -866,8 +1061,19 @@ public class MainActivity : Activity
         }, "Server list");
     }
 
-    private void PickScript(Action<string> chosen)
+    private void PickScript(Account? forAccount, Action<string> chosen)
     {
+        if (forAccount?.Remote == true)
+        {
+            // The server's scripts.
+            Run(async () =>
+            {
+                JArray list = (JArray)(await (await BotHub.HelperAsync(forAccount)).SendAsync("scripts.list", null, 150000))!;
+                List<string> scripts = list.Select(t => t.ToString()).ToList();
+                _ui.Post(() => ShowScriptPicker(scripts, chosen));
+            }, "Scripts");
+            return;
+        }
         string dir = SkuaHost.ScriptsDirectory;
         List<string> all = Directory.Exists(dir)
             ? Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
@@ -876,6 +1082,11 @@ public class MainActivity : Activity
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                 .ToList()
             : new();
+        ShowScriptPicker(all, chosen);
+    }
+
+    private void ShowScriptPicker(List<string> all, Action<string> chosen)
+    {
         if (all.Count == 0)
         {
             Ui.Toast(this, "No scripts yet. Use ⋯ → Update scripts first.");
@@ -886,7 +1097,7 @@ public class MainActivity : Activity
         box.SetPadding(Ui.Dp(this, 16), 0, Ui.Dp(this, 16), 0);
         EditText search = Ui.Field(this, "Search (e.g. ultra, farm, daily) …", "");
         ListView list = new(this);
-        ArrayAdapter<string> adapter = new(this, Android.Resource.Layout.SimpleListItem1, all.Take(300).ToList());
+        LightListAdapter adapter = new(this, all.Take(300).ToList());
         list.Adapter = adapter;
         box.AddView(search);
         box.AddView(list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Ui.Dp(this, 420)));
@@ -897,9 +1108,8 @@ public class MainActivity : Activity
             .Create()!;
         search.TextChanged += (_, _) =>
         {
-            string q = search.Text ?? "";
             adapter.Clear();
-            adapter.AddAll(all.Where(f => f.Contains(q, StringComparison.OrdinalIgnoreCase)).Take(300).ToList());
+            adapter.AddAll(ScriptSearch.Find(all, search.Text ?? "").Take(300).ToList());
             adapter.NotifyDataSetChanged();
         };
         list.ItemClick += (_, e) =>
@@ -965,5 +1175,64 @@ public class MainActivity : Activity
                 _ui.Post(() => Ui.Toast(this, $"{what}: {message}"));
             }
         });
+    }
+}
+
+/// <summary>List rows with light text on the dark dialogs.</summary>
+public sealed class LightListAdapter : ArrayAdapter<string>
+{
+    public LightListAdapter(Context context, IList<string> items)
+        : base(context, Android.Resource.Layout.SimpleListItem1, items)
+    {
+    }
+
+    public override View GetView(int position, View? convertView, ViewGroup parent)
+    {
+        View view = base.GetView(position, convertView, parent);
+        if (view is TextView text)
+        {
+            text.SetTextColor(Ui.Text);
+            text.SetTextSize(Android.Util.ComplexUnitType.Sp, 14);
+        }
+        return view;
+    }
+}
+
+/// <summary>Script search that forgives typos: exact text first, then letters in order.</summary>
+public static class ScriptSearch
+{
+    public static IEnumerable<string> Find(IEnumerable<string> scripts, string query)
+    {
+        string q = Normalize(query);
+        if (q.Length == 0)
+            return scripts;
+        List<(string Script, int Rank)> hits = new();
+        foreach (string script in scripts)
+        {
+            string name = Normalize(System.IO.Path.GetFileNameWithoutExtension(script));
+            string full = Normalize(script);
+            if (name.Contains(q))
+                hits.Add((script, name.StartsWith(q) ? 0 : 1));
+            else if (full.Contains(q))
+                hits.Add((script, 2));
+            else if (InOrder(name, q))
+                hits.Add((script, 3));
+            else if (InOrder(full, q))
+                hits.Add((script, 4));
+        }
+        return hits.OrderBy(h => h.Rank).ThenBy(h => h.Script.Length).Select(h => h.Script);
+    }
+
+    private static string Normalize(string s) =>
+        new(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
+    /// <summary>Every letter of the query appears in the name, in order ("kathooldept" in "kathooladept").</summary>
+    private static bool InOrder(string text, string query)
+    {
+        int i = 0;
+        foreach (char c in text)
+            if (i < query.Length && c == query[i])
+                i++;
+        return i == query.Length;
     }
 }
