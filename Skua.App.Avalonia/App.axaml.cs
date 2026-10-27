@@ -92,7 +92,11 @@ public partial class App : Application
         services.AddSingleton(HotKeys.CreateHotKeys);
         services.AddSingleton<IHotKeyService, HotKeyService>();
         services.AddSingleton<ISoundService, SoundService>();
-        services.AddSingleton<IFlashUtil, FlashUtil>();
+        // PoC: SKUA_REMOTE_FLASH=<phone-ip>[:port] drives skua.swf in the Ruffle Skua PoC app instead of local Flash.
+        if (RemoteFlashUtil.ConfiguredEndpoint is not null)
+            services.AddSingleton<IFlashUtil, RemoteFlashUtil>();
+        else
+            services.AddSingleton<IFlashUtil, FlashUtil>();
         services.AddSingleton<IScreenshotService, ScreenshotService>();
         services.AddSingleton<SkuaStartupHandler>();
         Skua.App.Avalonia.AppStartup.Services.AddSkuaMainAppViewModels(services);

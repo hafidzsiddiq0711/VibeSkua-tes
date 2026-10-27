@@ -1,0 +1,53 @@
+name: VibeSkua Remote PoC (Windows zip)
+
+on:
+  push:
+    branches: [ skua-remote-poc ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Skua.sln
+
+      # Same projects and packaging as BuildProject.bat (minus git pull / launching the app).
+      - name: Build
+        shell: pwsh
+        run: |
+          $projects = @(
+            "Skua.App.Avalonia\Skua.App.Avalonia.csproj",
+            "Skua.Manager.Avalonia\Skua.Manager.Avalonia.csproj",
+            "Skua.Plugin.DailyTracker\Skua.Plugin.DailyTracker.csproj",
+            "Skua.Plugin.ButlerV5\Skua.Plugin.ButlerV5.csproj",
+            "Skua.Plugin.Cosmetics\Skua.Plugin.Cosmetics.csproj"
+          )
+          foreach ($p in $projects) {
+            dotnet build $p -c Release --no-restore
+            if ($LASTEXITCODE -ne 0) { throw "build failed: $p" }
+          }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path Build)) { New-Item -ItemType Directory Build | Out-Null }
+          powershell -NoProfile -ExecutionPolicy Bypass -File package-build.ps1
+          if (-not (Test-Path Build\VibeSkua.exe)) { throw "Build\VibeSkua.exe missing" }
+          Copy-Item tools\remote-poc\Run-VibeSkua-Remote.bat Build\
+          if (Test-Path Build\Releases) { Remove-Item Build\Releases -Recurse -Force }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VibeSkua-Remote-PoC-win-x64
+          path: Build/
