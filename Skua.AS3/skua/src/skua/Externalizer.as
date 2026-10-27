@@ -15,11 +15,17 @@ import skua.remote.RemoteRegistry;
 
 public class Externalizer {
 
+    /** Socket transport when ExternalInterface isn't available (e.g. Artix Games Launcher). */
+    private var bridge:SocketBridge = null;
+
     public function Externalizer() {
         super();
     }
 
     public function init(root:Main):void {
+        if (!ExternalInterface.available)
+            this.bridge = new SocketBridge(root);
+
         // Core initialization
         this.addCallback("loadClient", Main.loadGame);
         this.addCallback("setBackgroundValues", Main.setBackgroundValues);
@@ -142,13 +148,23 @@ public class Externalizer {
 
 		this.debug("Externalizer::init done.");
         this.call("requestLoadGame");
+        if (this.bridge != null)
+            this.bridge.start();
     }
 
     public function addCallback(name:String, func:Function):void {
+        if (this.bridge != null) {
+            this.bridge.addCallback(name, func);
+            return;
+        }
         ExternalInterface.addCallback(name, func);
     }
 
     public function call(name:String, ...rest):* {
+        if (this.bridge != null) {
+            this.bridge.call(name, rest);
+            return null;
+        }
         return ExternalInterface.call(name, rest);
     }
 

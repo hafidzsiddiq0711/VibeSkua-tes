@@ -163,7 +163,10 @@ public class Main extends MovieClip {
     }
 
     public function onExtensionResponse(packet:*):void {
-        this.external.call('pext', JSON.stringify(packet));
+        // Serialize only `params`, which is all Flash's JSON.stringify writes for SFS events.
+        // Some Ruffle builds also write the Event getters, including `target` (the whole
+        // SmartFox client), which makes the packet huge or fails.
+        this.external.call('pext', JSON.stringify({params: packet.params}));
     }
 
     public function onConnectionLost(event:*):void {

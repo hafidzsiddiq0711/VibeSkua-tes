@@ -21,11 +21,13 @@ using System.Xml.Linq;
 namespace Skua.App.Avalonia.Flash;
 
 /// <summary>
-/// PoC: an <see cref="IFlashUtil"/> that drives skua.swf running inside the patched
-/// Ruffle Android app ("Ruffle Skua PoC") over TCP, instead of a local Flash ActiveX.
-///
-/// Enable by setting the environment variable SKUA_REMOTE_FLASH to the phone address,
-/// e.g. <c>192.168.1.23</c> or <c>192.168.1.23:5150</c>, before starting Skua.
+/// PoC: an <see cref="IFlashUtil"/> that drives a remote skua.swf over TCP instead of a local
+/// Flash ActiveX. Enable with the environment variable SKUA_REMOTE_FLASH before starting Skua:
+/// <list type="bullet">
+/// <item><c>listen</c> (or <c>listen:5150</c>): wait for skua.swf to connect, e.g. skua.swf
+/// opened in the Artix Games Launcher (it uses flash.net.Socket there).</item>
+/// <item><c>192.168.1.23[:5150]</c>: connect to the phone running the "Ruffle Skua PoC" app.</item>
+/// </list>
 ///
 /// Wire format (one JSON object per line):
 ///   -> {"id":1,"fn":"isNull","args":["world"]}
@@ -56,6 +58,8 @@ public sealed class RemoteFlashUtil : IFlashUtil
     private readonly Lazy<IScriptManager>? _lazyManager;
     private readonly string _host;
     private readonly int _port;
+    private readonly bool _listen;
+    private long _generation;
 
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JToken?>> _pending = new();
     private readonly BlockingCollection<(string Name, object[] Args)> _events = new();
@@ -83,12 +87,14 @@ public sealed class RemoteFlashUtil : IFlashUtil
         _messenger = messenger;
         _lazyManager = manager;
         (_host, _port) = ParseEndpoint(endpoint);
+        _listen = _host.Length == 0 || _host.Equals("listen", StringComparison.OrdinalIgnoreCase);
     }
 
     private static (string, int) ParseEndpoint(string endpoint)
     {
+        endpoint = endpoint.Trim();
         int colon = endpoint.LastIndexOf(':');
-        if (colon > 0 && int.TryParse(endpoint[(colon + 1)..], out int port))
+        if (colon >= 0 && int.TryParse(endpoint[(colon + 1)..], out int port))
             return (endpoint[..colon], port);
         return (endpoint, DefaultPort);
     }
@@ -107,6 +113,15 @@ public sealed class RemoteFlashUtil : IFlashUtil
 
     private void ConnectLoop()
     {
+        if (_listen)
+            AcceptLoop();
+        else
+            ClientLoop();
+    }
+
+    /// <summary>Connect mode: Skua dials the phone (Ruffle Skua PoC app).</summary>
+    private void ClientLoop()
+    {
         while (!_cts.IsCancellationRequested)
         {
             try
@@ -114,40 +129,115 @@ public sealed class RemoteFlashUtil : IFlashUtil
                 Trace.WriteLine($"[RemoteFlash] connecting to {_host}:{_port} ...");
                 var client = new TcpClient { NoDelay = true };
                 client.Connect(_host, _port);
-                var stream = client.GetStream();
-                lock (_writeLock)
-                {
-                    _client = client;
-                    _writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-                }
-                _connected = true;
-                Trace.WriteLine($"[RemoteFlash] connected to {_host}:{_port}");
-
-                using var reader = new StreamReader(stream, new UTF8Encoding(false));
-                string? line;
-                while ((line = reader.ReadLine()) != null)
-                    HandleLine(line);
+                RunConnection(client, $"{_host}:{_port}");
             }
             catch (Exception ex) when (!_cts.IsCancellationRequested)
             {
                 Trace.WriteLine($"[RemoteFlash] connection error: {ex.Message}");
             }
-            finally
-            {
-                _connected = false;
-                lock (_writeLock)
-                {
-                    try { _client?.Dispose(); } catch { }
-                    _client = null;
-                    _writer = null;
-                }
-                foreach (var kv in _pending)
-                    if (_pending.TryRemove(kv.Key, out var tcs))
-                        tcs.TrySetResult(null);
-            }
 
             if (!_cts.IsCancellationRequested)
                 Thread.Sleep(2000);
+        }
+    }
+
+    /// <summary>
+    /// Listen mode: skua.swf dials Skua (e.g. opened in the Artix Games Launcher, where it
+    /// uses flash.net.Socket). The newest connection always wins.
+    /// </summary>
+    private void AcceptLoop()
+    {
+        TcpListener listener;
+        try
+        {
+            listener = new TcpListener(System.Net.IPAddress.Any, _port);
+            listener.Start();
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"[RemoteFlash] cannot listen on port {_port}: {ex.Message}");
+            return;
+        }
+        _cts.Token.Register(() => { try { listener.Stop(); } catch { } });
+        Trace.WriteLine($"[RemoteFlash] waiting for skua.swf on port {_port} ...");
+
+        while (!_cts.IsCancellationRequested)
+        {
+            TcpClient client;
+            try
+            {
+                client = listener.AcceptTcpClient();
+            }
+            catch (Exception ex) when (!_cts.IsCancellationRequested)
+            {
+                Trace.WriteLine($"[RemoteFlash] accept error: {ex.Message}");
+                Thread.Sleep(500);
+                continue;
+            }
+            catch
+            {
+                return;
+            }
+
+            client.NoDelay = true;
+            string peer = client.Client.RemoteEndPoint?.ToString() ?? "?";
+            // Drop the previous connection (e.g. the phone reconnected after Wi-Fi hiccup).
+            lock (_writeLock)
+            {
+                try { _client?.Dispose(); } catch { }
+            }
+            new Thread(() =>
+            {
+                try { RunConnection(client, peer); }
+                catch (Exception ex) { Trace.WriteLine($"[RemoteFlash] connection error: {ex.Message}"); }
+            }) { IsBackground = true, Name = "RemoteFlash Reader" }.Start();
+        }
+    }
+
+    private void RunConnection(TcpClient client, string peer)
+    {
+        long generation = Interlocked.Increment(ref _generation);
+        var stream = client.GetStream();
+        lock (_writeLock)
+        {
+            _client = client;
+            _writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
+        }
+        _connected = true;
+        Trace.WriteLine($"[RemoteFlash] connected: {peer}");
+
+        try
+        {
+            using var reader = new StreamReader(stream, new UTF8Encoding(false));
+            string? line;
+            while ((line = reader.ReadLine()) != null)
+                HandleLine(line);
+        }
+        catch (Exception ex) when (!_cts.IsCancellationRequested)
+        {
+            Trace.WriteLine($"[RemoteFlash] read error ({peer}): {ex.Message}");
+        }
+        finally
+        {
+            Trace.WriteLine($"[RemoteFlash] disconnected: {peer}");
+            lock (_writeLock)
+            {
+                // Only tear down if a newer connection hasn't replaced us.
+                if (Interlocked.Read(ref _generation) == generation)
+                {
+                    _connected = false;
+                    try { _client?.Dispose(); } catch { }
+                    _client = null;
+                    _writer = null;
+                    foreach (var kv in _pending)
+                        if (_pending.TryRemove(kv.Key, out var tcs))
+                            tcs.TrySetResult(null);
+                }
+                else
+                {
+                    try { client.Dispose(); } catch { }
+                }
+            }
         }
     }
 
@@ -163,9 +253,10 @@ public sealed class RemoteFlashUtil : IFlashUtil
             return;
         }
 
-        if (msg.TryGetValue("id", out JToken? idTok) && idTok.Type == JTokenType.Integer)
+        // Some Ruffle builds write whole Numbers as "7.0", so accept integral floats as ids too.
+        if (msg.TryGetValue("id", out JToken? idTok) && idTok.Type is JTokenType.Integer or JTokenType.Float)
         {
-            if (_pending.TryRemove(idTok.Value<long>(), out var tcs))
+            if (_pending.TryRemove(Convert.ToInt64(idTok.Value<double>()), out var tcs))
                 tcs.TrySetResult(msg["r"]);
             return;
         }
@@ -177,6 +268,8 @@ public sealed class RemoteFlashUtil : IFlashUtil
         // The ActiveX host parses <arguments> as a single element, so handlers always
         // get exactly one argument: the concatenated text of everything passed.
         string text = ConcatText(msg["args"]);
+        if (ev == "pext")
+            text = NormalizeWholeNumbers(text);
         _events.Add((ev, new object[] { text }));
     }
 
@@ -282,10 +375,52 @@ public sealed class RemoteFlashUtil : IFlashUtil
             return null;
         return r.Type switch
         {
-            JTokenType.String => new XText(r.Value<string>()!).ToString(),
+            JTokenType.String => new XText(NormalizeWholeNumbers(r.Value<string>()!)).ToString(),
             JTokenType.Integer or JTokenType.Float => FormatNumber(r),
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// Flash writes whole Numbers in JSON without a fraction ("383618675"); some Ruffle builds
+    /// write "383618675.0", which Newtonsoft refuses for int fields. Rewrites such JSON results.
+    /// </summary>
+    internal static string NormalizeWholeNumbers(string s)
+    {
+        if (s.Length < 2 || !s.Contains(".0") || (s[0] != '{' && s[0] != '['))
+            return s;
+        JToken token;
+        try
+        {
+            using var reader = new JsonTextReader(new StringReader(s)) { FloatParseHandling = FloatParseHandling.Double, DateParseHandling = DateParseHandling.None };
+            token = JToken.ReadFrom(reader);
+        }
+        catch (JsonException)
+        {
+            return s;
+        }
+
+        bool changed = false;
+        void Walk(JToken t)
+        {
+            switch (t)
+            {
+                case JContainer c:
+                    foreach (JToken child in c.Children().ToList())
+                        Walk(child);
+                    break;
+                case JValue v when v.Type == JTokenType.Float:
+                    double d = v.Value<double>();
+                    if (!double.IsInfinity(d) && d == Math.Floor(d) && Math.Abs(d) < 9e15)
+                    {
+                        v.Value = (long)d;
+                        changed = true;
+                    }
+                    break;
+            }
+        }
+        Walk(token);
+        return changed ? token.ToString(Formatting.None) : s;
     }
 
     /// <summary>Mirror of FlashUtil.ToFlashXml's type mapping.</summary>

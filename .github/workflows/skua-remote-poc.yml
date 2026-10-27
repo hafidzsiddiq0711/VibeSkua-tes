@@ -45,6 +45,7 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File package-build.ps1
           if (-not (Test-Path Build\VibeSkua.exe)) { throw "Build\VibeSkua.exe missing" }
           Copy-Item tools\remote-poc\Run-VibeSkua-Remote.bat Build\
+          Copy-Item tools\remote-poc\skua-mobile.swf Build\
           if (Test-Path Build\Releases) { Remove-Item Build\Releases -Recurse -Force }
 
       - uses: actions/upload-artifact@v4
