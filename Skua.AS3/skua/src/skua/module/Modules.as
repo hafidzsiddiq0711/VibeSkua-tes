@@ -48,14 +48,18 @@ public class Modules {
         _lastFrameUpdate = now;
 
         var game:* = Main.instance.getGame();
-        if (game == null) {
+        // No UI before the world exists (login screen): modules would throw every frame.
+        if (game == null || game.ui == null) {
             return;
         }
 
         for (var name:String in _modules) {
             var module:Module = _modules[name];
             if (module.enabled) {
-                module.onFrame(game);
+                try {
+                    module.onFrame(game);
+                } catch (err:Error) {
+                }
             }
         }
     }
