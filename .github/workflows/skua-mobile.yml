@@ -66,6 +66,7 @@ jobs:
           set -e
           REV=$(grep -o 'rev = "[0-9a-f]*"' Skua.Ruffle/Cargo.toml | head -1 | cut -d'"' -f2)
           git init -q ruffle-src
+          git -C ruffle-src config core.autocrlf false
           git -C ruffle-src remote add origin https://github.com/ruffle-rs/ruffle.git
           git -C ruffle-src fetch -q --depth 1 origin "$REV"
           git -C ruffle-src checkout -q FETCH_HEAD
@@ -150,6 +151,7 @@ jobs:
           set -e
           REV=$(grep -o 'rev = "[0-9a-f]*"' Skua.Ruffle/Cargo.toml | head -1 | cut -d'"' -f2)
           git init -q ruffle-src
+          git -C ruffle-src config core.autocrlf false
           git -C ruffle-src remote add origin https://github.com/ruffle-rs/ruffle.git
           git -C ruffle-src fetch -q --depth 1 origin "$REV"
           git -C ruffle-src checkout -q FETCH_HEAD
