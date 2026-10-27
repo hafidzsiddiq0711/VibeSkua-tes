@@ -227,6 +227,24 @@ async Task<int> EndToEnd()
         // The login screen of the real game, read through the bridge.
         await Task.Delay(5000);
         Console.WriteLine($"login screen visible: {host.Bot.Flash.GetGameObject<bool>("mcLogin.visible", false)}");
+
+        // With a test account (CI secrets), log in all the way into the world.
+        string user = Environment.GetEnvironmentVariable("SKUA_E2E_USER") ?? "";
+        if (user.Length > 0)
+        {
+            bool playing = await host.LoginAsync(user, Environment.GetEnvironmentVariable("SKUA_E2E_PASS") ?? "", "Twilly");
+            if (playing)
+            {
+                await Task.Delay(5000);
+                Console.WriteLine($"in game: map {host.Bot.Map.Name}, level {host.Bot.Player.Level}, cell {host.Bot.Player.Cell}");
+            }
+            Console.WriteLine(playing ? "E2E LOGIN OK" : "E2E LOGIN FAILED");
+            ok &= playing;
+        }
+        else
+        {
+            Console.WriteLine("no SKUA_E2E_USER secret: login not tested");
+        }
     }
     var status = await client.SendAsync("status");
     Console.WriteLine($"status: {status?.ToString(Newtonsoft.Json.Formatting.None)}");

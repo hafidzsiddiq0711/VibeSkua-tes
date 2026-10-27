@@ -1,3 +1,33 @@
+diff --git a/core/src/avm2/globals/flash/display/bitmap_data.rs b/core/src/avm2/globals/flash/display/bitmap_data.rs
+index 6815b736..c514bd67 100644
+--- a/core/src/avm2/globals/flash/display/bitmap_data.rs
++++ b/core/src/avm2/globals/flash/display/bitmap_data.rs
+@@ -973,9 +973,9 @@ pub fn draw<'gc>(
+             quality,
+         ) {
+             Ok(()) => {}
+-            Err(BitmapDataDrawError::Unimplemented) => {
+-                return Err("Render backend does not support BitmapData.draw".into());
+-            }
++            // Skua: the headless player has no renderer, so there is nothing to draw. Games
++            // call draw() while building characters and maps; failing would abort their scripts.
++            Err(BitmapDataDrawError::Unimplemented) => {}
+         };
+     }
+     Ok(Value::Undefined)
+@@ -1049,9 +1049,9 @@ pub fn draw_with_quality<'gc>(
+             quality,
+         ) {
+             Ok(()) => {}
+-            Err(BitmapDataDrawError::Unimplemented) => {
+-                return Err("Render backend does not support BitmapData.draw".into());
+-            }
++            // Skua: the headless player has no renderer, so there is nothing to draw. Games
++            // call draw() while building characters and maps; failing would abort their scripts.
++            Err(BitmapDataDrawError::Unimplemented) => {}
+         };
+     }
+     Ok(Value::Undefined)
 diff --git a/core/src/avm2/globals/json.rs b/core/src/avm2/globals/json.rs
 index 43e19628..dbfa051c 100644
 --- a/core/src/avm2/globals/json.rs

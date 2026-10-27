@@ -105,6 +105,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: End-to-end - AQW loads in headless Ruffle, driven like Skua Mobile
+        env:
+          # Optional test account (repository secrets): also logs in and enters the world.
+          SKUA_E2E_USER: ${{ secrets.SKUA_E2E_USER }}
+          SKUA_E2E_PASS: ${{ secrets.SKUA_E2E_PASS }}
         run: |
           set -o pipefail
           dotnet build Skua.Headless/Skua.Headless.csproj -c Release -o out/headless
