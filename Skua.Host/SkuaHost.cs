@@ -39,6 +39,9 @@ public sealed class SkuaHost : IDisposable
     public bool GameConnected => _flash.IsConnected;
     public bool GameLoaded => _loaded;
 
+    /// <summary>Raised (on a worker thread) each time AQW has finished loading in the movie.</summary>
+    public event Action? GameReady;
+
     private SkuaHost(IServiceProvider services)
     {
         Services = services;
@@ -196,6 +199,9 @@ public sealed class SkuaHost : IDisposable
             case "loaded":
                 _loaded = true;
                 Say("AQW termuat.");
+                Action? ready = GameReady;
+                if (ready is not null)
+                    Task.Run(ready);
                 break;
             case "debug":
                 if (args.Length > 0)

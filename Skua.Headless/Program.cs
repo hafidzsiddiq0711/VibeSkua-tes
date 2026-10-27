@@ -27,6 +27,8 @@ switch (command)
         return await SelfTest();
     case "run":
         return await Run();
+    case "bot":
+        return await Bot();
     default:
         Console.WriteLine("usage: skua-headless selftest [--refs DIR] [--with-scripts]");
         Console.WriteLine("       skua-headless run --user U --pass P [--server S] [--script PATH] [--endpoint listen:5150] [--update-scripts]");
@@ -92,6 +94,66 @@ async Task<int> SelfTest()
             Console.WriteLine("no CoreBots-based scripts found");
             failures++;
         }
+
+        failures += await ControlTest();
+    }
+
+    async Task<int> ControlTest()
+    {
+        // Manager <-> bot protocol, the way Skua Mobile drives each account.
+        int fails = 0;
+        using BotController bot = new(host, 9);
+        bot.StartControlServer();
+        using BotClient client = new(9);
+        async Task Check(string label, Func<Task<bool>> test)
+        {
+            try
+            {
+                bool ok = await test();
+                Console.WriteLine($"{(ok ? "[OK]  " : "[FAIL]")} control {label}");
+                if (!ok) fails++;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[FAIL] control {label}: {e.Message}");
+                fails++;
+            }
+        }
+        await Check("ping", () => client.PingAsync(5000));
+        await Check("configure + status", async () =>
+        {
+            BotProfile profile = new() { Username = "selftest", Server = "Twilly", Script = "Farm/BuyScrolls.cs", AutoLogin = false };
+            await client.SendAsync("configure", new Newtonsoft.Json.Linq.JObject { ["profile"] = Newtonsoft.Json.Linq.JObject.FromObject(profile) });
+            await Task.Delay(2500);
+            var status = await client.SendAsync("status");
+            Console.WriteLine($"       status: {status?.ToString(Newtonsoft.Json.Formatting.None)}");
+            return status?.Value<string>("profileUser") == "selftest";
+        });
+        await Check("skuaOptions.get", async () =>
+        {
+            var opts = await client.SendAsync("skuaOptions.get");
+            Console.WriteLine($"       {opts?.ToString(Newtonsoft.Json.Formatting.None)}");
+            return opts?["LagKiller"] is not null;
+        });
+        await Check("scriptOptions.get/set (Farm/BuyScrolls.cs)", async () =>
+        {
+            var items = await client.SendAsync("scriptOptions.get", new Newtonsoft.Json.Linq.JObject { ["script"] = "Farm/BuyScrolls.cs" }, 120000);
+            Console.WriteLine($"       {items?.Count()} option(s): {string.Join(", ", items!.Select(i => $"{i["name"]}:{i["type"]}={i["value"]}"))}");
+            var first = items!.First();
+            string key = (first.Value<string>("category") is { Length: > 0 } c ? c + "/" : "") + first.Value<string>("name");
+            string newValue = first.Value<string>("type") == "bool" ? (!bool.Parse(first.Value<string>("value")!)).ToString() : first.Value<string>("value")!;
+            await client.SendAsync("scriptOptions.set", new Newtonsoft.Json.Linq.JObject { ["script"] = "Farm/BuyScrolls.cs", ["values"] = new Newtonsoft.Json.Linq.JObject { [key] = newValue } }, 120000);
+            var again = await client.SendAsync("scriptOptions.get", new Newtonsoft.Json.Linq.JObject { ["script"] = "Farm/BuyScrolls.cs" }, 120000);
+            return again!.First().Value<string>("value") == newValue;
+        });
+        await Check("CBO file round trip", () =>
+        {
+            OptionCatalog.WriteCbo("selftest", new Dictionary<string, string> { ["AntiLag"] = "False", ["FarmClassSelect"] = "Legion Revenant" });
+            var read = OptionCatalog.ReadCbo("selftest");
+            return Task.FromResult(read["AntiLag"] == "False" && read["FarmClassSelect"] == "Legion Revenant" && read["PrivateRooms"] == "True");
+        });
+        await Check("logs", async () => (await client.SendAsync("logs", new Newtonsoft.Json.Linq.JObject { ["since"] = 0 }))?["lines"]?.Any() == true);
+        return fails;
     }
 
     Console.WriteLine(failures == 0 ? "SELFTEST OK" : $"SELFTEST FAILED ({failures})");
@@ -119,6 +181,22 @@ async Task<int> SelfTest()
             return 1;
         }
     }
+}
+
+// skua-headless bot --slot N : one account controlled by a manager (control 6150+N, game 5150+N).
+async Task<int> Bot()
+{
+    int slot = int.Parse(Arg("--slot", "1"));
+    using SkuaHost host = SkuaHost.Create($"listen:{BotController.GamePort(slot)}");
+    using BotController bot = new(host, slot);
+    host.Log += line => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}");
+    TaskCompletionSource quit = new();
+    bot.ShutdownRequested += () => quit.TrySetResult();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; quit.TrySetResult(); };
+    host.Start();
+    bot.StartControlServer();
+    await quit.Task;
+    return 0;
 }
 
 async Task<int> Run()
