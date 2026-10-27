@@ -23,7 +23,15 @@ public class Externalizer {
     }
 
     public function init(root:Main):void {
-        if (!ExternalInterface.available)
+        // Socket transport when there is no ExternalInterface (Artix Games Launcher), or when the
+        // host asked for it explicitly with the skuaHost flashvar (Skua Mobile), even if a future
+        // player version starts exposing ExternalInterface.
+        var skuaHost:* = null;
+        try {
+            skuaHost = root.loaderInfo.parameters["skuaHost"];
+        } catch (e:Error) {
+        }
+        if (!ExternalInterface.available || (skuaHost != null && String(skuaHost).length > 0))
             this.bridge = new SocketBridge(root);
 
         // Core initialization
