@@ -59,6 +59,13 @@ async Task<int> SelfTest()
         Console.WriteLine($"CoreBots.cs present: {File.Exists(coreBots)}");
         if (!File.Exists(coreBots))
             failures++;
+        else if (Skua.Core.Scripts.ScriptPlatformCompat.ReadScript(coreBots).Contains("IsWindowsVersionAtLeast"))
+        {
+            Console.WriteLine("[FAIL] CoreBots still has the Windows version check after compat");
+            failures++;
+        }
+        else
+            Console.WriteLine("[OK]   CoreBots Windows check neutralised");
 
         // A few real scripts that pull in CoreBots/CoreFarms/CoreAdvanced via //cs_include.
         var candidates = Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)

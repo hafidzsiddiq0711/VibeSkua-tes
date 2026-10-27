@@ -147,7 +147,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
 
             UnloadPreviousScript();
 
-            string scriptContent = File.ReadAllText(LoadedScript);
+            string scriptContent = ScriptPlatformCompat.ReadScript(LoadedScript);
             object? script = await Task.Run(() => Compile(scriptContent));
 
             LoadScriptConfig(script);
@@ -590,7 +590,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
 
             try
             {
-                string fileContent = File.ReadAllText(currentFile);
+                string fileContent = ScriptPlatformCompat.ReadScript(currentFile);
                 sourceCache[currentFile] = fileContent;
 
                 List<string> newIncludes = ExtractIncludeDirectivesFromSource(fileContent, currentFile, references);
@@ -792,7 +792,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
 
         Parallel.ForEach(includedFilesSnapshot, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, includedFile =>
         {
-            string includeSource = sourceCache.TryGetValue(includedFile, out string? cached) ? cached : File.ReadAllText(includedFile);
+            string includeSource = sourceCache.TryGetValue(includedFile, out string? cached) ? cached : ScriptPlatformCompat.ReadScript(includedFile);
             sourceCache[includedFile] = includeSource;
             CheckScriptVersionRequirement(includeSource);
             List<string> deps = ExtractIncludeDependencies(includeSource, includedFile);
@@ -855,7 +855,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
 
             foreach (string newFile in newlyAddedFiles)
             {
-                string includeSource = sourceCache.TryGetValue(newFile, out string? cached) ? cached : File.ReadAllText(newFile);
+                string includeSource = sourceCache.TryGetValue(newFile, out string? cached) ? cached : ScriptPlatformCompat.ReadScript(newFile);
                 sourceCache[newFile] = includeSource;
                 CheckScriptVersionRequirement(includeSource);
                 List<string> deps = ExtractIncludeDependencies(includeSource, newFile);
@@ -898,7 +898,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
         {
             foreach (string file in orderedFiles)
             {
-                string src = sourceCache.TryGetValue(file, out string? cached) ? cached : File.ReadAllText(file);
+                string src = sourceCache.TryGetValue(file, out string? cached) ? cached : ScriptPlatformCompat.ReadScript(file);
                 byte[] srcBytes = Encoding.UTF8.GetBytes(src);
                 if (dependencyGraph.TryGetValue(file, out List<string>? fileDeps) && fileDeps.Count > 0)
                 {
@@ -940,7 +940,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
             }
             else
             {
-                string src = sourceCache.TryGetValue(file, out string? cached) ? cached : File.ReadAllText(file);
+                string src = sourceCache.TryGetValue(file, out string? cached) ? cached : ScriptPlatformCompat.ReadScript(file);
                 fileInfoCache[file] = (src, includeFileName, includeHash, compiledPath);
             }
         }
