@@ -210,8 +210,17 @@ async Task<int> Bot()
     TaskCompletionSource quit = new();
     bot.ShutdownRequested += () => quit.TrySetResult();
     Console.CancelKeyPress += (_, e) => { e.Cancel = true; quit.TrySetResult(); };
-    host.Start();
-    bot.StartControlServer();
+    try
+    {
+        host.Start();
+        bot.StartControlServer();
+    }
+    catch (System.Net.Sockets.SocketException e)
+    {
+        Console.WriteLine($"Bot {slot}: port {BotController.GamePort(slot)}/{BotController.ControlPort(slot)} is in use ({e.Message}). " +
+            "Another bot for this slot is still running: restart Skua Server.");
+        return 3;
+    }
     await quit.Task;
     bot.Headless?.Stop();
     return 0;
@@ -239,8 +248,21 @@ async Task<int> Server()
         Environment.SetEnvironmentVariable("SKUA_DATA_DIR", Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, config.DataDir)));
     string ruffle = Arg("--ruffle", DefaultRuffle()), swf = Arg("--swf", DefaultSwf());
     using SkuaServer server = new(config, slot => BotProcess(slot, ruffle, swf), Path.Combine(AppContext.BaseDirectory, "logs"));
+    try
+    {
+        server.Start();
+    }
+    catch (System.Net.Sockets.SocketException)
+    {
+        Console.WriteLine($"Port {config.Port} is already in use: is Skua Server already running (another window, or autostart)?");
+        Console.WriteLine("Close the other one first. Press Enter to quit.");
+        Console.ReadLine();
+        return 1;
+    }
+    int leftovers = SkuaServer.KillLeftovers();
+    if (leftovers > 0)
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Ended {leftovers} bot/game process(es) left over from the last run.");
     server.Ready = PrepareServerData(desktopDir);
-    server.Start();
     Console.WriteLine("==============================================================");
     Console.WriteLine($"  Skua Server \"{config.Name}\" is running on port {config.Port}.");
     Console.WriteLine($"  Token: {config.Token}");

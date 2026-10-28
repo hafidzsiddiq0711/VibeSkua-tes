@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -247,6 +248,8 @@ sealed class SkuaServer : IDisposable
             info.RedirectStandardOutput = true;
             info.RedirectStandardError = true;
             Process process = Process.Start(info) ?? throw new InvalidOperationException("Could not start the bot.");
+            // Bots (and their games) end with the server, even when its window is just closed.
+            BotJob.Add(process);
             // One writer per slot for the server's lifetime: Windows won't open the same file twice,
             // and a slot is started again after its bot stops or fails.
             StreamWriter log = _logs.GetOrAdd(slot, s => new StreamWriter(
@@ -289,6 +292,35 @@ sealed class SkuaServer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Ends bots and games left running by an earlier server (e.g. its window was closed): they hold
+    /// the slots' ports and stay logged in. Call after this server's port is taken.
+    /// </summary>
+    public static int KillLeftovers()
+    {
+        int killed = 0;
+        string dir = AppContext.BaseDirectory.TrimEnd('\\', '/');
+        foreach (string name in new[] { "skua-headless", "skua-ruffle" })
+        {
+            foreach (Process p in Process.GetProcessesByName(name))
+            {
+                try
+                {
+                    if (p.Id == Environment.ProcessId)
+                        continue;
+                    string? file = p.MainModule?.FileName;
+                    if (file is null || !file.StartsWith(dir, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    p.Kill(true);
+                    killed++;
+                }
+                catch { }
+                finally { p.Dispose(); }
+            }
+        }
+        return killed;
+    }
+
     private static string SafeExitCode(Process process)
     {
         try { return process.ExitCode.ToString(); } catch { return "?"; }
@@ -303,4 +335,85 @@ sealed class SkuaServer : IDisposable
         foreach (var (_, process) in _bots)
             try { process.Kill(true); } catch { }
     }
+}
+
+/// <summary>Windows job object: processes in it are killed when the server process ends.</summary>
+static class BotJob
+{
+    private static readonly IntPtr _job = Create();
+
+    public static void Add(Process process)
+    {
+        if (_job != IntPtr.Zero)
+            AssignProcessToJobObject(_job, process.Handle);
+    }
+
+    private static IntPtr Create()
+    {
+        if (!OperatingSystem.IsWindows())
+            return IntPtr.Zero;
+        try
+        {
+            IntPtr job = CreateJobObject(IntPtr.Zero, null);
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION info = new();
+            info.BasicLimitInformation.LimitFlags = 0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            int size = Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
+            IntPtr ptr = Marshal.AllocHGlobal(size);
+            try
+            {
+                Marshal.StructureToPtr(info, ptr, false);
+                if (!SetInformationJobObject(job, 9, ptr, (uint)size)) // JobObjectExtendedLimitInformation
+                    return IntPtr.Zero;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
+            }
+            return job;
+        }
+        catch
+        {
+            return IntPtr.Zero;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_BASIC_LIMIT_INFORMATION
+    {
+        public long PerProcessUserTimeLimit;
+        public long PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize;
+        public UIntPtr MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass;
+        public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IO_COUNTERS
+    {
+        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount, ReadTransferCount, WriteTransferCount, OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+    {
+        public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+        public IO_COUNTERS IoInfo;
+        public UIntPtr ProcessMemoryLimit;
+        public UIntPtr JobMemoryLimit;
+        public UIntPtr PeakProcessMemoryUsed;
+        public UIntPtr PeakJobMemoryUsed;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr CreateJobObject(IntPtr attributes, string? name);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool SetInformationJobObject(IntPtr job, int infoClass, IntPtr info, uint length);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
 }
