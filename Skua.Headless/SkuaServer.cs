@@ -51,6 +51,7 @@ sealed class SkuaServer : IDisposable
     private readonly ConcurrentDictionary<int, Process> _bots = new();
     private readonly ConcurrentDictionary<int, BotClient> _clients = new();
     private readonly ConcurrentDictionary<int, SemaphoreSlim> _spawnLocks = new();
+    private readonly ConcurrentDictionary<int, StreamWriter> _logs = new();
     private readonly CancellationTokenSource _cts = new();
     private TcpListener? _listener;
 
@@ -218,7 +219,13 @@ sealed class SkuaServer : IDisposable
             info.RedirectStandardOutput = true;
             info.RedirectStandardError = true;
             Process process = Process.Start(info) ?? throw new InvalidOperationException("Could not start the bot.");
-            StreamWriter log = new(Path.Combine(_logDir, $"bot{slot}.log"), append: true) { AutoFlush = true };
+            // One writer per slot for the server's lifetime: Windows won't open the same file twice,
+            // and a slot is started again after its bot stops or fails.
+            StreamWriter log = _logs.GetOrAdd(slot, s => new StreamWriter(
+                new FileStream(Path.Combine(_logDir, $"bot{s}.log"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete),
+                new UTF8Encoding(false)) { AutoFlush = true });
+            lock (log)
+                log.WriteLine($"===== {DateTime.Now:yyyy-MM-dd HH:mm:ss} bot {slot} starting =====");
             process.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (log) log.WriteLine(e.Data); };
             process.ErrorDataReceived += (_, e) => { if (e.Data is not null) lock (log) log.WriteLine(e.Data); };
             process.BeginOutputReadLine();
