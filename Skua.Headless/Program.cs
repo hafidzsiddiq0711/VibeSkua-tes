@@ -549,7 +549,7 @@ async Task<int> Lab()
             var status = await bot.SendAsync("status");
             Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s status: {status?.ToString(Newtonsoft.Json.Formatting.None)}");
             if ((int)sw.Elapsed.TotalSeconds % 60 < 10)
-                Console.WriteLine($"LAB PROGRESS {sw.Elapsed.TotalMinutes:F0} min: lv {status?["level"]} xp {status?["xp"]}/{status?["xpNeeded"]} gold {status?["gold"]} map {status?["map"]} mem {status?["memMb"]} MB");
+                Console.WriteLine($"LAB PROGRESS {sw.Elapsed.TotalMinutes:F0} min: lv {status?["level"]} xp {status?["xp"]}/{status?["xpNeeded"]} gold {status?["gold"]} gained xp {status?["xpGained"]} gold {status?["goldGained"]} kills {status?["kills"]} quests {status?["quests"]} cpu {status?["cpu"]}% map {status?["map"]} mem {status?["memMb"]} MB");
             var logs = await bot.SendAsync("logs", new Newtonsoft.Json.Linq.JObject { ["since"] = seq });
             foreach (var line in logs?["lines"] ?? new Newtonsoft.Json.Linq.JArray())
                 Console.WriteLine($"BOT {line}");

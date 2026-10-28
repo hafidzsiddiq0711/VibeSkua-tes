@@ -70,6 +70,10 @@ public sealed class BotController : IDisposable
         _host = host;
         _slot = slot;
         host.Log += AddLog;
+        // Farming counters from the game's own reward packets (kills, quest turn-ins): XP and gold
+        // gained since this bot started, whatever the script and however the game shows them.
+        CommunityToolkit.Mvvm.Messaging.StrongReferenceMessenger.Default.Register<BotController, Skua.Core.Messaging.ExtensionPacketMessage, int>(
+            this, (int)Skua.Core.Messaging.MessageChannels.GameEvents, static (bot, m) => bot.CountRewards(m.Packet));
         host.GameReady += () =>
         {
             _autoStartDone = false;
@@ -272,6 +276,34 @@ public sealed class BotController : IDisposable
 
     // ------------------------------------------------------------------ status
 
+    private long _xpGained, _goldGained, _kills, _questsDone;
+
+    private void CountRewards(object packet)
+    {
+        try
+        {
+            if (packet is not Newtonsoft.Json.Linq.JToken p || p["params"]?["type"]?.ToString() != "json")
+                return;
+            Newtonsoft.Json.Linq.JToken? data = p["params"]?["dataObj"];
+            switch (data?["cmd"]?.ToString())
+            {
+                case "addGoldExp":
+                    Interlocked.Add(ref _xpGained, data.Value<long?>("intExp") ?? 0);
+                    Interlocked.Add(ref _goldGained, data.Value<long?>("intGold") ?? 0);
+                    if (data.Value<string>("typ") == "m")
+                        Interlocked.Increment(ref _kills);
+                    break;
+                case "ccqr" when data.Value<int?>("bSuccess") == 1:
+                    Interlocked.Increment(ref _questsDone);
+                    Newtonsoft.Json.Linq.JToken? reward = data["rewardObj"];
+                    Interlocked.Add(ref _xpGained, reward?.Value<long?>("intExp") ?? 0);
+                    Interlocked.Add(ref _goldGained, reward?.Value<long?>("intGold") ?? 0);
+                    break;
+            }
+        }
+        catch { }
+    }
+
     private TimeSpan _lastCpu;
     private DateTime _lastCpuAt;
 
@@ -312,6 +344,10 @@ public sealed class BotController : IDisposable
                     ["script"] = _host.Manager.ScriptRunning && _host.Manager.LoadedScript is { } ls ? Path.GetFileNameWithoutExtension(ls) : _profile.Script.Length > 0 ? Path.GetFileNameWithoutExtension(_profile.Script) : "",
                     ["memMb"] = Environment.WorkingSet / (1024 * 1024),
                     ["cpu"] = CpuPercent(),
+                    ["xpGained"] = Interlocked.Read(ref _xpGained),
+                    ["goldGained"] = Interlocked.Read(ref _goldGained),
+                    ["kills"] = Interlocked.Read(ref _kills),
+                    ["quests"] = Interlocked.Read(ref _questsDone),
                     ["headless"] = Headless?.Running == true,
                 };
                 try

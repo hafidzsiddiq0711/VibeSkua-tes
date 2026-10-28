@@ -26,6 +26,16 @@ public sealed class BotState
     /// <summary>Feed a status: keeps XP gained (across level-ups) and gold over the last 15 minutes.</summary>
     public void Sample(JObject s)
     {
+        // Newer bots count rewards themselves (kill and quest packets): exact, also at max level.
+        if (s.Value<long?>("xpGained") is long xpGained)
+        {
+            DateTime at = DateTime.UtcNow;
+            if (_samples.Count > 0 && xpGained < _samples[^1].Xp)
+                _samples.Clear(); // a new bot process counts from zero
+            _samples.Add((at, xpGained, s.Value<long?>("goldGained") ?? 0));
+            _samples.RemoveAll(x => at - x.At > TimeSpan.FromMinutes(15));
+            return;
+        }
         if (s.Value<bool?>("playing") != true || s.Value<int?>("level") is not int level || s.Value<int?>("xp") is not int xp)
             return;
         if (_lastLevel >= 0)
@@ -43,7 +53,7 @@ public sealed class BotState
         _samples.RemoveAll(x => now - x.At > TimeSpan.FromMinutes(15));
     }
 
-    /// <summary>"+480k XP/h · +3.5k gold/h" once there are 2 minutes of samples; "" before.</summary>
+    /// <summary>"+480k XP/h · +3.5k gold/h" once there is a minute of samples; "" before.</summary>
     public string Rate()
     {
         if (_samples.Count < 2)
@@ -51,7 +61,7 @@ public sealed class BotState
         var (t0, x0, g0) = _samples[0];
         var (t1, x1, g1) = _samples[^1];
         double hours = (t1 - t0).TotalHours;
-        if (hours < 2 / 60.0)
+        if (hours < 1 / 60.0)
             return "";
         return $"+{Short((x1 - x0) / hours)} XP/h · {(g1 >= g0 ? "+" : "")}{Short((g1 - g0) / hours)} gold/h";
     }
