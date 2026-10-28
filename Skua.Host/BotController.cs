@@ -272,6 +272,30 @@ public sealed class BotController : IDisposable
 
     // ------------------------------------------------------------------ status
 
+    private TimeSpan _lastCpu;
+    private DateTime _lastCpuAt;
+
+    /// <summary>
+    /// CPU use of this bot process since the last status, in % of one core. On the phone the
+    /// headless game runs in this process too, so it is the whole account's cost.
+    /// </summary>
+    private int CpuPercent()
+    {
+        try
+        {
+            TimeSpan cpu = System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime;
+            DateTime now = DateTime.UtcNow;
+            int percent = _lastCpuAt == default ? 0 : (int)Math.Round((cpu - _lastCpu).TotalMilliseconds / Math.Max(1, (now - _lastCpuAt).TotalMilliseconds) * 100);
+            _lastCpu = cpu;
+            _lastCpuAt = now;
+            return percent;
+        }
+        catch
+        {
+            return -1;
+        }
+    }
+
     private void RefreshStatusLoop()
     {
         Task.Run(async () =>
@@ -287,6 +311,7 @@ public sealed class BotController : IDisposable
                     ["running"] = _host.Manager.ScriptRunning,
                     ["script"] = _host.Manager.ScriptRunning && _host.Manager.LoadedScript is { } ls ? Path.GetFileNameWithoutExtension(ls) : _profile.Script.Length > 0 ? Path.GetFileNameWithoutExtension(_profile.Script) : "",
                     ["memMb"] = Environment.WorkingSet / (1024 * 1024),
+                    ["cpu"] = CpuPercent(),
                     ["headless"] = Headless?.Running == true,
                 };
                 try

@@ -290,7 +290,7 @@ public class MainActivity : Activity
             if (!account.Headless && account.RenderScale < 100)
                 meta.Add($"{account.RenderScale}% res");
             if (alive && state!.Status.Value<long?>("memMb") is long mb)
-                meta.Add($"bot {mb} MB");
+                meta.Add(!account.Remote && state.Status.Value<int?>("cpu") is int cpu and >= 0 ? $"bot {mb} MB · CPU {cpu}%" : $"bot {mb} MB");
             // Is it really farming? XP and gold per hour over the last minutes.
             if (alive && state!.Rate() is { Length: > 0 } rate)
                 meta.Add(rate);
