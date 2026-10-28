@@ -380,9 +380,19 @@ async Task<int> ServerTest()
             return false;
         });
     }
+    await Check("an account plays in one bot only (bot 3 stops when bot 2 gets its account)", async () =>
+    {
+        using BotClient bot2 = new("127.0.0.1", 6199, "test-token", 2);
+        BotProfile profile = new() { Username = "servertest", AutoLogin = false };
+        await bot2.SendAsync("configure", new Newtonsoft.Json.Linq.JObject { ["profile"] = Newtonsoft.Json.Linq.JObject.FromObject(profile) }, 150000);
+        var info = await bot2.SendAsync("server.info");
+        var running = info?["running"]?.Select(t => (int)t).ToList() ?? new();
+        await bot2.SendAsync("shutdown");
+        return running.Contains(2) && !running.Contains(3);
+    });
     await Check("shutdown", async () =>
     {
-        await bot.SendAsync("shutdown");
+        try { await bot.SendAsync("shutdown"); } catch { }
         await Task.Delay(1500);
         var info = await bot.SendAsync("server.info");
         return info?["running"]?.Any() != true;
