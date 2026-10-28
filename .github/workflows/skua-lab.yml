@@ -64,7 +64,7 @@ jobs:
           keep = [l for l in lines if not l.lstrip().startswith("at ") and "Encountered stub" not in l and "Unknown device font" not in l]
           keep = [l for l in keep if "Downloading" not in l and "Downloaded" not in l and "Data Collection" not in l]
           # GitHub keeps 10 annotations per step: the important lines first, then the end of the log.
-          key = [l for l in keep if "LAB CPU" in l or "Compiled in" in l or "World check" in l][-40:]
+          key = [l for l in keep if "LAB CPU" in l or "Compiled in" in l or "LAB PROGRESS" in l or "nudging" in l or "Watcher failed" in l][-60:]
           print("::notice title=lab key::" + "\n".join(key).replace("%", "%25").replace("\n", "%0A"))
           chunks = [keep[i:i+70] for i in range(0, len(keep), 70)][-8:]
           for n, c in enumerate(chunks):
@@ -121,7 +121,7 @@ jobs:
           # skip the script download progress spam
           keep = [l for l in keep if "Downloading" not in l and "Downloaded" not in l]
           # GitHub keeps 10 annotations per step: the important lines first, then the end of the log.
-          key = [l for l in keep if "LAB CPU" in l or "Compiled in" in l or "World check" in l][-40:]
+          key = [l for l in keep if "LAB CPU" in l or "Compiled in" in l or "LAB PROGRESS" in l or "nudging" in l or "Watcher failed" in l][-60:]
           print("::notice title=lab key::" + "\n".join(key).replace("%", "%25").replace("\n", "%0A"))
           chunks = [keep[i:i+70] for i in range(0, len(keep), 70)][-8:]
           for n, c in enumerate(chunks):

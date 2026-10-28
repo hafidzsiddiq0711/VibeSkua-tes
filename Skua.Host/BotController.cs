@@ -300,6 +300,8 @@ public sealed class BotController : IDisposable
                             s["user"] = _host.Bot.Player.Username;
                             s["level"] = _host.Bot.Player.Level;
                             s["gold"] = _host.Bot.Player.Gold;
+                            s["xp"] = _host.Bot.Player.XP;
+                            s["xpNeeded"] = _host.Bot.Player.RequiredXP;
                             s["map"] = _host.Bot.Map.Name;
                             s["cell"] = _host.Bot.Player.Cell;
                         }
