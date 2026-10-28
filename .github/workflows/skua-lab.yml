@@ -1,0 +1,60 @@
+name: Skua lab (test account, real script)
+
+# Debugging runs with the test account: push to the skua-lab branch.
+on:
+  push:
+    branches: [skua-lab]
+
+jobs:
+  lab-linux:
+    name: Headless bot runs a real script (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ruffle sources with Skua's patches
+        run: |
+          set -e
+          REV=$(grep -o 'rev = "[0-9a-f]*"' Skua.Ruffle/Cargo.toml | head -1 | cut -d'"' -f2)
+          git init -q ruffle-src
+          git -C ruffle-src config core.autocrlf false
+          git -C ruffle-src remote add origin https://github.com/ruffle-rs/ruffle.git
+          git -C ruffle-src fetch -q --depth 1 origin "$REV"
+          git -C ruffle-src checkout -q FETCH_HEAD
+          for p in tools/ruffle-patches/*.patch; do git -C ruffle-src apply "../$p"; done
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Skua.Ruffle
+      - name: Build skua-ruffle
+        run: cargo build --release --manifest-path Skua.Ruffle/Cargo.toml --bin skua-ruffle
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Lab
+        env:
+          SKUA_E2E_USER: ${{ secrets.SKUA_E2E_USER }}
+          SKUA_E2E_PASS: ${{ secrets.SKUA_E2E_PASS }}
+        run: |
+          set -o pipefail
+          dotnet build Skua.Headless/Skua.Headless.csproj -c Release -o out/headless
+          LAB_ARGS=$(cat tools/lab-args.txt 2>/dev/null || true)
+          timeout 1500 dotnet out/headless/skua-headless.dll lab --ruffle Skua.Ruffle/target/release/skua-ruffle \
+            --swf tools/remote-poc/skua-mobile.swf $LAB_ARGS 2>&1 | tee lab.log
+      - name: Report as annotations
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          lines = open("lab.log", encoding="utf-8", errors="replace").read().splitlines() if os.path.exists("lab.log") else []
+          keep = [l for l in lines if not l.lstrip().startswith("at ") and "Encountered stub" not in l and "Unknown device font" not in l]
+          # skip the script download progress spam
+          keep = [l for l in keep if "Downloading" not in l and "Downloaded" not in l]
+          chunks = [keep[i:i+70] for i in range(0, len(keep), 70)][-9:]
+          for n, c in enumerate(chunks):
+              print(f"::notice title=lab {n}::" + "\n".join(c).replace("%", "%25").replace("\n", "%0A"))
+          PY

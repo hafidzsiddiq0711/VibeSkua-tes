@@ -31,6 +31,8 @@ switch (command)
         return await Bot();
     case "e2e":
         return await EndToEnd();
+    case "lab":
+        return await Lab();
     case "server":
         return await Server();
     case "servertest":
@@ -454,4 +456,55 @@ sealed class ProcessHeadlessGame(string ruffle, string swf) : IHeadlessGame
         try { _process?.Kill(); } catch { }
         _process = null;
     }
+}
+
+// skua-headless lab --ruffle PATH --swf PATH [--script S] [--seconds 150]
+//   Like a Skua Server bot with the test account (SKUA_E2E_USER/PASS): log in headless, run a
+//   real script through the control protocol and report what the bot does. For debugging.
+async Task<int> Lab()
+{
+    const int slot = 6;
+    using SkuaHost host = SkuaHost.Create($"listen-local:{BotController.GamePort(slot)}");
+    using BotController bot = new(host, slot)
+    {
+        Headless = new ProcessHeadlessGame(Arg("--ruffle"), Arg("--swf")),
+    };
+    host.Log += line => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}");
+    host.Start();
+    bot.StartControlServer();
+    using BotClient client = new(slot);
+    string script = Arg("--script", "0FarmerJoeDoAll.cs");
+    int seconds = int.Parse(Arg("--seconds", "150"));
+
+    Console.WriteLine("LAB: updating scripts …");
+    await client.SendAsync("updateScripts", null, 10 * 60 * 1000);
+    await client.SendAsync("configure", new Newtonsoft.Json.Linq.JObject
+    {
+        ["profile"] = Newtonsoft.Json.Linq.JObject.FromObject(new BotProfile
+        {
+            Username = Environment.GetEnvironmentVariable("SKUA_E2E_USER") ?? "",
+            Password = Environment.GetEnvironmentVariable("SKUA_E2E_PASS") ?? "",
+            Server = Arg("--server", "Twilly"),
+            Script = script,
+            AutoLogin = true,
+            AutoStart = true,
+        }),
+    });
+    await client.SendAsync("headless.start");
+    var sw = Stopwatch.StartNew();
+    long seq = 0;
+    while (sw.Elapsed.TotalSeconds < seconds)
+    {
+        await Task.Delay(10000);
+        var status = await client.SendAsync("status");
+        Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s status: {status?.ToString(Newtonsoft.Json.Formatting.None)}");
+        if (host.GameLoaded && host.Bot.Player.Playing)
+            Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s {host.WorldCheck()}");
+        var logs = await client.SendAsync("logs", new Newtonsoft.Json.Linq.JObject { ["since"] = seq });
+        seq = logs?.Value<long?>("seq") ?? seq;
+    }
+    try { await client.SendAsync("stop", null, 30000); } catch (Exception e) { Console.WriteLine($"LAB stop: {e.Message}"); }
+    await client.SendAsync("headless.stop");
+    Console.WriteLine("LAB DONE");
+    return 0;
 }
