@@ -1,1 +1,1 @@
---script Farm/Leveling.cs --seconds 600
+--script Farm/Leveling.cs --seconds 600 --options HidePlayers=true,LagKiller=true,DisableFX=false

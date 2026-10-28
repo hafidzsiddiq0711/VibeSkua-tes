@@ -532,6 +532,9 @@ async Task<int> Lab()
             Script = script == "none" ? "" : script,
             AutoLogin = true,
             AutoStart = script != "none",
+            // --options "HidePlayers=true,SetFPS=6"
+            SkuaOptions = Arg("--options").Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(kv => kv.Split('=', 2)).Where(kv => kv.Length == 2).ToDictionary(kv => kv[0].Trim(), kv => kv[1].Trim()),
         }),
     }, 10 * 60 * 1000);
     await bot.SendAsync("headless.start", null, 60000);
