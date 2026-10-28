@@ -212,13 +212,29 @@ public static class BotHub
         int max = account.Remote ? RemoteSlots : MaxSlots;
         lock (_slots)
         {
-            HashSet<int> used = AccountStore.All
-                .Where(a => a.ServerId == account.ServerId && a.Id != account.Id && _slots.ContainsKey(a.Id))
-                .Select(a => _slots[a.Id])
-                .ToHashSet();
+            List<Account> others = AccountStore.All.Where(a => a.ServerId == account.ServerId && a.Id != account.Id).ToList();
+            HashSet<int> used = others.Where(a => _slots.ContainsKey(a.Id)).Select(a => _slots[a.Id]).ToHashSet();
+            if (account.Remote)
+            {
+                // On a server each account keeps its own bot number, so a bot the phone lost track
+                // of (busy, server offline for a while) is found again instead of a second one
+                // logging in as the same account.
+                used.UnionWith(others.Where(a => a.ServerSlot > 0).Select(a => a.ServerSlot));
+                if (account.ServerSlot > 0 && account.ServerSlot <= max && !used.Contains(account.ServerSlot))
+                    return account.ServerSlot;
+            }
             for (int slot = 1; slot <= max; slot++)
+            {
                 if (!used.Contains(slot))
+                {
+                    if (account.Remote)
+                    {
+                        account.ServerSlot = slot;
+                        Task.Run(AccountStore.Save);
+                    }
                     return slot;
+                }
+            }
         }
         return null;
     }
@@ -323,6 +339,7 @@ public static class BotHub
     {
         await ShutdownAsync(account);
         account.ServerId = serverId;
+        account.ServerSlot = 0;
         if (serverId.Length > 0)
             account.Mode = "headless";
         AccountStore.Save();

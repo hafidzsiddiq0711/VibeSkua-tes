@@ -26,6 +26,9 @@ public sealed class Account
     public string ServerId { get; set; } = "";
 
     public bool Remote => ServerId.Length > 0;
+
+    /// <summary>The bot number this account always uses on its server (0: not given one yet).</summary>
+    public int ServerSlot { get; set; }
     /// <summary>Skua options changed for this account (applied after login).</summary>
     public Dictionary<string, string> SkuaOptions { get; set; } = new();
 

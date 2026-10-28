@@ -59,6 +59,8 @@ sealed class SkuaServer : IDisposable
     private readonly ConcurrentDictionary<int, BotClient> _clients = new();
     private readonly ConcurrentDictionary<int, SemaphoreSlim> _spawnLocks = new();
     private readonly ConcurrentDictionary<int, StreamWriter> _logs = new();
+    /// <summary>Account each bot was configured with.</summary>
+    private readonly ConcurrentDictionary<int, string> _users = new();
     private readonly CancellationTokenSource _cts = new();
     private TcpListener? _listener;
 
@@ -193,11 +195,7 @@ sealed class SkuaServer : IDisposable
             case "server.stopBot":
             {
                 int slot = req.Value<int?>("slot") ?? -1;
-                if (_bots.TryRemove(slot, out Process? process))
-                {
-                    try { process.Kill(true); } catch { }
-                    Log($"bot {slot} stopped");
-                }
+                StopBot(slot, $"bot {slot} stopped");
                 return null;
             }
             default:
@@ -212,6 +210,8 @@ sealed class SkuaServer : IDisposable
             throw new InvalidOperationException($"This server runs slots 0-{_config.MaxSlots}.");
 
         BotClient client = _clients.GetOrAdd(slot, s => new BotClient(s));
+        if (cmd == "configure" && req["profile"]?.Value<string>("Username") is { Length: > 0 } user)
+            OneBotPerAccount(slot, user);
         if (PollOnly.Contains(cmd))
         {
             // A busy bot (compiling a script on a loaded PC) answers slowly: it's only "not running"
@@ -230,8 +230,39 @@ sealed class SkuaServer : IDisposable
             args.Remove(key);
         JToken? data = await client.SendAsync(cmd, args, 30 * 60 * 1000);
         if (cmd == "shutdown")
+        {
             _bots.TryRemove(slot, out _);
+            _users.TryRemove(slot, out _);
+        }
         return data;
+    }
+
+    /// <summary>
+    /// An account plays in one bot only: two logged in as the same account kick each other out
+    /// forever. A bot that gets another account is started fresh (no session left from the old one).
+    /// </summary>
+    private void OneBotPerAccount(int slot, string user)
+    {
+        foreach (var (other, otherUser) in _users)
+        {
+            if (other != slot && string.Equals(otherUser, user, StringComparison.OrdinalIgnoreCase))
+            {
+                StopBot(other, $"{user} moved from bot {other} to bot {slot}");
+            }
+        }
+        if (_users.TryGetValue(slot, out string? current) && !string.Equals(current, user, StringComparison.OrdinalIgnoreCase))
+            StopBot(slot, $"bot {slot} switches from {current} to {user}: restarting it");
+        _users[slot] = user;
+    }
+
+    private void StopBot(int slot, string why)
+    {
+        _users.TryRemove(slot, out _);
+        if (_bots.TryRemove(slot, out Process? process))
+        {
+            try { process.Kill(true); process.WaitForExit(5000); } catch { }
+            Log(why);
+        }
     }
 
     private bool Running(int slot) => _bots.TryGetValue(slot, out Process? p) && !p.HasExited;
