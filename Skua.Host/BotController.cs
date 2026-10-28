@@ -139,9 +139,17 @@ public sealed class BotController : IDisposable
         }
     }
 
-    private static string ScriptPath(string relative) =>
-        Path.IsPathRooted(relative) ? relative
-            : Path.Combine(SkuaHost.ScriptsDirectory, relative.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar));
+    private static string ScriptPath(string relative)
+    {
+        if (Path.IsPathRooted(relative))
+            return relative;
+        string path = Path.Combine(SkuaHost.ScriptsDirectory, relative.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar));
+        if (File.Exists(path) || !Directory.Exists(SkuaHost.ScriptsDirectory))
+            return path;
+        // Scripts get moved between folders in the script repo: find it by its file name.
+        string? found = Directory.EnumerateFiles(SkuaHost.ScriptsDirectory, Path.GetFileName(path), SearchOption.AllDirectories).FirstOrDefault();
+        return found ?? path;
+    }
 
     // ------------------------------------------------------------------ Skua options
 
