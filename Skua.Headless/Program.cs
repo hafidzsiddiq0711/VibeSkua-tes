@@ -429,35 +429,6 @@ async Task<int> Run()
 
 
 /// <summary>Headless game as a skua-ruffle process (Linux, Windows).</summary>
-sealed class ProcessHeadlessGame(string ruffle, string swf) : IHeadlessGame
-{
-    private Process? _process;
-
-    public bool Running => _process is { HasExited: false };
-
-    public bool Start(int gamePort)
-    {
-        // stdin stays open while this bot lives; skua-ruffle quits when it closes, so a crashed
-        // bot never leaves a game behind that would fight the next one for its port.
-        ProcessStartInfo info = new(ruffle) { RedirectStandardError = true, RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true };
-        info.ArgumentList.Add(swf);
-        info.ArgumentList.Add($"127.0.0.1:{gamePort}");
-        info.ArgumentList.Add("--until-stdin-closes");
-        _process = Process.Start(info);
-        if (_process is null)
-            return false;
-        _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) Console.WriteLine($"  {e.Data}"); };
-        _process.BeginErrorReadLine();
-        return true;
-    }
-
-    public void Stop()
-    {
-        try { _process?.Kill(); } catch { }
-        _process = null;
-    }
-}
-
 // skua-headless lab --ruffle PATH --swf PATH [--script S] [--seconds 150]
 //   Like a Skua Server bot with the test account (SKUA_E2E_USER/PASS): log in headless, run a
 //   real script through the control protocol and report what the bot does. For debugging.
@@ -507,4 +478,33 @@ async Task<int> Lab()
     await client.SendAsync("headless.stop");
     Console.WriteLine("LAB DONE");
     return 0;
+}
+
+sealed class ProcessHeadlessGame(string ruffle, string swf) : IHeadlessGame
+{
+    private Process? _process;
+
+    public bool Running => _process is { HasExited: false };
+
+    public bool Start(int gamePort)
+    {
+        // stdin stays open while this bot lives; skua-ruffle quits when it closes, so a crashed
+        // bot never leaves a game behind that would fight the next one for its port.
+        ProcessStartInfo info = new(ruffle) { RedirectStandardError = true, RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true };
+        info.ArgumentList.Add(swf);
+        info.ArgumentList.Add($"127.0.0.1:{gamePort}");
+        info.ArgumentList.Add("--until-stdin-closes");
+        _process = Process.Start(info);
+        if (_process is null)
+            return false;
+        _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) Console.WriteLine($"  {e.Data}"); };
+        _process.BeginErrorReadLine();
+        return true;
+    }
+
+    public void Stop()
+    {
+        try { _process?.Kill(); } catch { }
+        _process = null;
+    }
 }
