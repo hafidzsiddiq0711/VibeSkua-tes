@@ -267,9 +267,19 @@ jobs:
         run: dotnet build Skua.Mobile/Skua.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:AcceptAndroidSDKLicenses=True -p:AndroidSdkDirectory="$ANDROID_HOME"
 
       - name: Build APK
+        env:
+          # Same key for every build, so the app updates in place and keeps its accounts.
+          SKUA_KEYSTORE_PASS: ${{ secrets.SKUA_KEYSTORE_PASS }}
         run: |
           set -o pipefail
-          dotnet build Skua.Mobile/Skua.Mobile.csproj -c Release -p:AndroidSdkDirectory="$ANDROID_HOME" 2>&1 | tee android.log
+          SIGN=()
+          if [ -n "$SKUA_KEYSTORE_PASS" ]; then
+            SIGN=(-p:AndroidKeyStore=true -p:AndroidSigningKeyStore="$PWD/Skua.Mobile/signing/skua-mobile.keystore"
+                  -p:AndroidSigningKeyAlias=skua -p:AndroidSigningKeyPass="$SKUA_KEYSTORE_PASS" -p:AndroidSigningStorePass="$SKUA_KEYSTORE_PASS")
+          else
+            echo "::warning title=signing::SKUA_KEYSTORE_PASS secret missing: the APK gets a new debug key and can't update an installed copy."
+          fi
+          dotnet build Skua.Mobile/Skua.Mobile.csproj -c Release -p:AndroidSdkDirectory="$ANDROID_HOME" "${SIGN[@]}" 2>&1 | tee android.log
 
       - name: Report build errors as annotations
         if: failure()

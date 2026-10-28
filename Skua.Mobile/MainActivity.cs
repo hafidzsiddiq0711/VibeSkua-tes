@@ -14,6 +14,7 @@ namespace Skua.Mobile;
 
 /// <summary>The manager: accounts, groups, Start/Stop all, watch or headless, options.</summary>
 [Activity(Label = "Skua Mobile", MainLauncher = true, Exported = true, Icon = "@mipmap/ic_launcher", RoundIcon = "@mipmap/ic_launcher_round",
+    Theme = "@android:style/Theme.DeviceDefault.NoActionBar",
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.KeyboardHidden,
     WindowSoftInputMode = SoftInput.AdjustResize)]
 public class MainActivity : Activity
@@ -146,6 +147,10 @@ public class MainActivity : Activity
         listHeader.SetGravity(GravityFlags.CenterVertical);
         _accountsHeader = Ui.Label(this, "ACCOUNTS", 11, Ui.Muted, bold: true);
         listHeader.AddView(_accountsHeader, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
+        TextView servers = Ui.Label(this, "Servers", 13, Ui.Gold, bold: true);
+        servers.SetPadding(Ui.Dp(this, 8), Ui.Dp(this, 8), Ui.Dp(this, 14), Ui.Dp(this, 8));
+        servers.Click += (_, _) => ManageServers();
+        listHeader.AddView(servers);
         TextView add = Ui.Label(this, "+ Add account", 13, Ui.Gold, bold: true);
         add.SetPadding(Ui.Dp(this, 8), Ui.Dp(this, 8), 0, Ui.Dp(this, 8));
         add.Click += (_, _) => EditAccount(null);
