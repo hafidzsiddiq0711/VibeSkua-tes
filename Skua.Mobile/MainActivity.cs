@@ -604,7 +604,9 @@ public class MainActivity : Activity
         ["LagKiller"] = "true",
         ["HidePlayers"] = "true",
         ["OptimizePlayers"] = "true",
-        ["DisableFX"] = "true",
+        // Not DisableFX: it walks every animation each frame (costs more than it saves headless,
+        // and throws errors from armor/hair clips).
+        ["DisableFX"] = "false",
         ["SkipCutscenes"] = "true",
         ["DisableDeathAds"] = "true",
     };
@@ -616,7 +618,7 @@ public class MainActivity : Activity
         {
             foreach (var kv in EcoOptions)
                 a.SkuaOptions[kv.Key] = kv.Value;
-            a.SkuaOptions["SetFPS"] = a.Headless ? "12" : "20";
+            a.SkuaOptions["SetFPS"] = a.Headless ? "6" : "20";
             a.RenderScale = Math.Min(a.RenderScale, 50);
         }
         AccountStore.Save();

@@ -57,7 +57,7 @@ public sealed class BotController : IDisposable
     private readonly string _instance = Guid.NewGuid().ToString("N")[..8];
 
     /// <summary>Frame rate of a headless game unless the account sets one (AQW itself runs at 24-30).</summary>
-    public static int HeadlessFps { get; set; } = 12;
+    public static int HeadlessFps { get; set; } = 8;
 
     /// <summary>Headless player for this platform (null: not available).</summary>
     public IHeadlessGame? Headless { get; set; }
