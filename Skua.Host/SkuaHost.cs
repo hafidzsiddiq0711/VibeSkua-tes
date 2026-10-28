@@ -318,7 +318,10 @@ public sealed class SkuaHost : IDisposable
             var f = Bot.Flash;
             return $"World check: map {Bot.Map.Name}, cell {f.GetGameObject<string>("world.strFrame")} / {f.GetGameObject<string>("world.strPad")}, " +
                 $"items {f.GetGameObject<int>("world.myAvatar.items.length")}, map loading {f.GetGameObject<bool>("world.mapLoadInProgress")}, " +
-                $"avatar art loaded {f.CallGameFunction<bool>("world.myAvatar.pMC.artLoaded")}, player loaded {Bot.Player.Loaded}";
+                $"avatar art loaded {f.CallGameFunction<bool>("world.myAvatar.pMC.artLoaded")}, player loaded {Bot.Player.Loaded}, " +
+                $"players in room {Bot.Map.PlayerCount}, in my cell {Bot.Map.CellPlayers.Count}, " +
+                // The cell the server told everyone (uoTree): others see me only there.
+                $"my cell for others {Bot.Map.Players.Find(p => string.Equals(p.Name, Bot.Player.Username, StringComparison.OrdinalIgnoreCase))?.Cell ?? "(not listed)"}";
         }
         catch (Exception e)
         {

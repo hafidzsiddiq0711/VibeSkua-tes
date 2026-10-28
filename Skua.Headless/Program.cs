@@ -516,6 +516,8 @@ async Task<int> Lab()
             foreach (var line in logs?["lines"] ?? new Newtonsoft.Json.Linq.JArray())
                 Console.WriteLine($"BOT {line}");
             seq = logs?.Value<long?>("seq") ?? seq;
+            if ((int)sw.Elapsed.TotalSeconds % 30 < 10)
+                Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s {await bot.SendAsync("worldCheck")}");
         }
         catch (Exception e)
         {
@@ -526,7 +528,7 @@ async Task<int> Lab()
     try { await bot.SendAsync("shutdown", null, 15000); } catch { }
     string file = Path.Combine(logDir, "bot1.log");
     if (File.Exists(file))
-        foreach (string line in File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith("at ")).TakeLast(40))
+        foreach (string line in new StreamReader(new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)).ReadToEnd().Split('\n').Where(l => !l.TrimStart().StartsWith("at ")).TakeLast(40))
             Console.WriteLine($"FILE {line}");
     Console.WriteLine("LAB DONE");
     return 0;

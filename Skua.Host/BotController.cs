@@ -389,6 +389,8 @@ public sealed class BotController : IDisposable
                 return "pong";
             case "status":
                 return _status;
+            case "worldCheck":
+                return _host.WorldCheck();
             case "logs":
             {
                 long since = req.Value<long?>("since") ?? 0;
