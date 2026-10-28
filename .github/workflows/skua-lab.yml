@@ -55,6 +55,8 @@ jobs:
             --swf SkuaServer/skua-mobile.swf $LAB_ARGS 2>&1 | tee lab.log
       - name: Report as annotations
         if: always()
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           python - <<'PY'
           import os
