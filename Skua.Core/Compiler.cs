@@ -369,7 +369,7 @@ public class Compiler : CSharpScriptExecution
 
     private bool CompileOrWaitForAssembly(string source, string outputPath, ScriptLoadContext? loadContext)
     {
-        string mutexName = $"Global\\Skua_Compile_{Path.GetFileName(outputPath).Replace(".dll", "").Replace("-", "_")}";
+        string mutexName = $"Global\\Skua_Compile_{Path.GetFileName(outputPath).Replace(".dll", "").Replace("-", "_")}{Skua.Core.Models.ClientFileSources.InstanceTag}";
         Mutex? compilationMutex = null;
 
         try

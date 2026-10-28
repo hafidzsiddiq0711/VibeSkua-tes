@@ -233,8 +233,13 @@ async Task<int> Server()
 {
     string configPath = Path.Combine(AppContext.BaseDirectory, "server.json");
     ServerConfig config = ServerConfig.LoadOrCreate(configPath, out bool created);
+    // Before anything reads Skua's folders: the bots (child processes) inherit this.
+    string desktopDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VibeSkua");
+    if (config.DataDir.Length > 0)
+        Environment.SetEnvironmentVariable("SKUA_DATA_DIR", Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, config.DataDir)));
     string ruffle = Arg("--ruffle", DefaultRuffle()), swf = Arg("--swf", DefaultSwf());
     using SkuaServer server = new(config, slot => BotProcess(slot, ruffle, swf), Path.Combine(AppContext.BaseDirectory, "logs"));
+    server.Ready = PrepareServerData(desktopDir);
     server.Start();
     Console.WriteLine("==============================================================");
     Console.WriteLine($"  Skua Server \"{config.Name}\" is running on port {config.Port}.");
@@ -251,6 +256,45 @@ async Task<int> Server()
     Console.CancelKeyPress += (_, e) => { e.Cancel = true; quit.TrySetResult(); };
     await quit.Task;
     return 0;
+}
+
+// First start with its own data folder: CoreBots options (classes etc.) from VibeSkua desktop,
+// and the scripts downloaded.
+async Task PrepareServerData(string desktopDir)
+{
+    string dataDir = Skua.Core.Models.ClientFileSources.SkuaDIR;
+    if (string.Equals(Path.GetFullPath(dataDir).TrimEnd('\\', '/'), Path.GetFullPath(desktopDir).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+        return;
+    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Skua data folder: {dataDir}");
+    try
+    {
+        string options = Path.Combine(dataDir, "options"), desktopOptions = Path.Combine(desktopDir, "options");
+        if (!Directory.Exists(options) && Directory.Exists(desktopOptions))
+        {
+            Directory.CreateDirectory(options);
+            foreach (string file in Directory.GetFiles(desktopOptions))
+                File.Copy(file, Path.Combine(options, Path.GetFileName(file)), false);
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Copied CoreBots options from VibeSkua desktop.");
+        }
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Could not copy VibeSkua options: {e.Message}");
+    }
+    string scripts = Skua.Core.Models.ClientFileSources.SkuaScriptsDIR;
+    if (Directory.Exists(scripts) && Directory.EnumerateFiles(scripts, "*.cs", SearchOption.AllDirectories).Any())
+        return;
+    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Downloading the scripts (first start) …");
+    try
+    {
+        using SkuaHost host = SkuaHost.Create("listen-local:5149");
+        int count = await host.UpdateScriptsAsync(new Progress<string>(_ => { }));
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Scripts ready: {count} files.");
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Script download failed ({e.Message}); use Update scripts in Skua Mobile.");
+    }
 }
 
 // skua-headless servertest [--ruffle PATH --swf PATH] : the server as Skua Mobile uses it (CI).
@@ -429,27 +473,24 @@ async Task<int> Run()
 
 
 /// <summary>Headless game as a skua-ruffle process (Linux, Windows).</summary>
-// skua-headless lab --ruffle PATH --swf PATH [--script S] [--seconds 150]
-//   Like a Skua Server bot with the test account (SKUA_E2E_USER/PASS): log in headless, run a
-//   real script through the control protocol and report what the bot does. For debugging.
+// skua-headless lab [--ruffle PATH --swf PATH] [--script S] [--seconds 150]
+//   The test account (SKUA_E2E_USER/PASS) through a Skua Server exactly as Skua Mobile drives it:
+//   own data folder, bot process started on demand, real script. For debugging.
 async Task<int> Lab()
 {
-    const int slot = 6;
-    using SkuaHost host = SkuaHost.Create($"listen-local:{BotController.GamePort(slot)}");
-    using BotController bot = new(host, slot)
-    {
-        Headless = new ProcessHeadlessGame(Arg("--ruffle"), Arg("--swf")),
-    };
-    host.Log += line => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}");
-    host.Start();
-    bot.StartControlServer();
-    using BotClient client = new(slot);
-    string script = Arg("--script", "0FarmerJoeDoAll.cs");
+    string desktopDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VibeSkua");
+    Environment.SetEnvironmentVariable("SKUA_DATA_DIR", Path.Combine(AppContext.BaseDirectory, "data"));
+    ServerConfig config = new() { Bind = "127.0.0.1", Port = 6198, Token = "lab-token", MaxSlots = 4 };
+    string ruffle = Arg("--ruffle", DefaultRuffle()), swf = Arg("--swf", DefaultSwf());
+    string logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+    using SkuaServer server = new(config, slot => BotProcess(slot, ruffle, swf), logDir);
+    server.Ready = PrepareServerData(desktopDir);
+    server.Start();
+    using BotClient bot = new("127.0.0.1", 6198, "lab-token", 1);
+    string script = Arg("--script", "Other/FarmJoeKits/0FarmerJoeDoAll.cs");
     int seconds = int.Parse(Arg("--seconds", "150"));
 
-    Console.WriteLine("LAB: updating scripts …");
-    await client.SendAsync("updateScripts", null, 10 * 60 * 1000);
-    await client.SendAsync("configure", new Newtonsoft.Json.Linq.JObject
+    await bot.SendAsync("configure", new Newtonsoft.Json.Linq.JObject
     {
         ["profile"] = Newtonsoft.Json.Linq.JObject.FromObject(new BotProfile
         {
@@ -460,22 +501,33 @@ async Task<int> Lab()
             AutoLogin = true,
             AutoStart = true,
         }),
-    });
-    await client.SendAsync("headless.start");
+    }, 10 * 60 * 1000);
+    await bot.SendAsync("headless.start", null, 60000);
     var sw = Stopwatch.StartNew();
     long seq = 0;
     while (sw.Elapsed.TotalSeconds < seconds)
     {
         await Task.Delay(10000);
-        var status = await client.SendAsync("status");
-        Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s status: {status?.ToString(Newtonsoft.Json.Formatting.None)}");
-        if (host.GameLoaded && host.Bot.Player.Playing)
-            Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s {host.WorldCheck()}");
-        var logs = await client.SendAsync("logs", new Newtonsoft.Json.Linq.JObject { ["since"] = seq });
-        seq = logs?.Value<long?>("seq") ?? seq;
+        try
+        {
+            var status = await bot.SendAsync("status");
+            Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s status: {status?.ToString(Newtonsoft.Json.Formatting.None)}");
+            var logs = await bot.SendAsync("logs", new Newtonsoft.Json.Linq.JObject { ["since"] = seq });
+            foreach (var line in logs?["lines"] ?? new Newtonsoft.Json.Linq.JArray())
+                Console.WriteLine($"BOT {line}");
+            seq = logs?.Value<long?>("seq") ?? seq;
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s error: {e.Message}");
+        }
     }
-    try { await client.SendAsync("stop", null, 30000); } catch (Exception e) { Console.WriteLine($"LAB stop: {e.Message}"); }
-    await client.SendAsync("headless.stop");
+    try { await bot.SendAsync("stop", null, 30000); } catch (Exception e) { Console.WriteLine($"LAB stop: {e.Message}"); }
+    try { await bot.SendAsync("shutdown", null, 15000); } catch { }
+    string file = Path.Combine(logDir, "bot1.log");
+    if (File.Exists(file))
+        foreach (string line in File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith("at ")).TakeLast(40))
+            Console.WriteLine($"FILE {line}");
     Console.WriteLine("LAB DONE");
     return 0;
 }

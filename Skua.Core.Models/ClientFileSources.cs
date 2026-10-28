@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 
 using System.Threading;
@@ -13,7 +14,12 @@ public static class ClientFileSources
     public static string DisplayVersion { get; } = IsNightly ? AssemblyVersion + "-N" : AssemblyVersion;
 
     public static string LegacySkuaDIR { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Skua");
-    public static string SkuaDIR { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VibeSkua");
+    /// <summary>SKUA_DATA_DIR: a data folder of its own (Skua Server), apart from VibeSkua desktop's.</summary>
+    public static string? DataDirOverride { get; } = Environment.GetEnvironmentVariable("SKUA_DATA_DIR") is { Length: > 0 } d ? Path.GetFullPath(d) : null;
+    public static string SkuaDIR { get; } = DataDirOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VibeSkua");
+
+    /// <summary>Suffix for machine-wide lock names, so a separate data folder doesn't share them.</summary>
+    public static string InstanceTag { get; } = DataDirOverride is null ? "" : "_" + ((uint)DataDirOverride.ToLowerInvariant().Aggregate(17, (h, c) => unchecked(h * 31 + c))).ToString("x8");
     public static string VibeSkuaDIR => SkuaDIR;
     public static string SkuaSettingsDIR { get; } = Path.Combine(SkuaDIR, "Skua.settings.json");
     public static string SkuaScriptsDIR { get; } = Path.Combine(SkuaDIR, "Scripts");
@@ -40,6 +46,11 @@ public static class ClientFileSources
             if (_migrationAttempted)
                 return;
             _migrationAttempted = true;
+            if (DataDirOverride is not null)
+            {
+                Directory.CreateDirectory(DataDirOverride);
+                return;
+            }
 
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             string vibeSkuaDir = Path.Combine(appData, "VibeSkua");

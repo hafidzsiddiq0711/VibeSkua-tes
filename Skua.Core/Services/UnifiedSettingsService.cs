@@ -25,7 +25,7 @@ public class UnifiedSettingsService
 
         Directory.CreateDirectory(ClientFileSources.SkuaDIR);
 
-        _fileMutex = new Mutex(false, @"Global\VibeSkua.Settings.IO");
+        _fileMutex = new Mutex(false, @"Global\VibeSkua.Settings.IO" + ClientFileSources.InstanceTag);
     }
 
     public void Initialize(AppRole role)
@@ -554,7 +554,7 @@ public class UnifiedSettingsService
             // Signal cross-process settings change event
             try
             {
-                using EventWaitHandle notifyEvent = new(false, EventResetMode.AutoReset, @"Global\VibeSkua.Settings.Changed");
+                using EventWaitHandle notifyEvent = new(false, EventResetMode.AutoReset, @"Global\VibeSkua.Settings.Changed" + ClientFileSources.InstanceTag);
                 notifyEvent.Set();
             }
             catch { }

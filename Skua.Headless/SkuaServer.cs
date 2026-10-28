@@ -17,6 +17,12 @@ sealed class ServerConfig
     public int Port { get; set; } = 6100;
     public string Token { get; set; } = "";
     public int MaxSlots { get; set; } = 12;
+    /// <summary>
+    /// The bots' own Skua folder (scripts, options, settings), next to the program by default.
+    /// "" shares VibeSkua desktop's %APPDATA%\VibeSkua, whose open files and locks get in the way
+    /// when both run on one PC.
+    /// </summary>
+    public string DataDir { get; set; } = "data";
 
     public static ServerConfig LoadOrCreate(string path, out bool created)
     {
@@ -54,6 +60,9 @@ sealed class SkuaServer : IDisposable
     private readonly ConcurrentDictionary<int, StreamWriter> _logs = new();
     private readonly CancellationTokenSource _cts = new();
     private TcpListener? _listener;
+
+    /// <summary>Bots start once this is done (first download of the scripts).</summary>
+    public Task Ready { get; set; } = Task.CompletedTask;
 
     public SkuaServer(ServerConfig config, Func<int, ProcessStartInfo> botStart, string logDir)
     {
@@ -222,6 +231,7 @@ sealed class SkuaServer : IDisposable
 
     private async Task SpawnAsync(int slot, BotClient client)
     {
+        await Ready;
         SemaphoreSlim gate = _spawnLocks.GetOrAdd(slot, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
         try
