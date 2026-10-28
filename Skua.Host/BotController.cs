@@ -391,6 +391,12 @@ public sealed class BotController : IDisposable
                 return _status;
             case "worldCheck":
                 return _host.WorldCheck();
+            case "join":
+            {
+                string map = req.Value<string>("map") ?? throw new InvalidOperationException("No map given.");
+                await Task.Run(() => _host.Bot.Map.Join(map, req.Value<string>("cell") ?? "Enter", req.Value<string>("pad") ?? "Spawn"));
+                return null;
+            }
             case "logs":
             {
                 long since = req.Value<long?>("since") ?? 0;

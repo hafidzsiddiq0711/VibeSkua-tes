@@ -319,13 +319,28 @@ public sealed class SkuaHost : IDisposable
             return $"World check: map {Bot.Map.Name}, cell {f.GetGameObject<string>("world.strFrame")} / {f.GetGameObject<string>("world.strPad")}, " +
                 $"items {f.GetGameObject<int>("world.myAvatar.items.length")}, map loading {f.GetGameObject<bool>("world.mapLoadInProgress")}, " +
                 $"avatar art loaded {f.CallGameFunction<bool>("world.myAvatar.pMC.artLoaded")}, player loaded {Bot.Player.Loaded}, " +
-                $"players in room {Bot.Map.PlayerCount}, in my cell {Bot.Map.CellPlayers.Count}, " +
-                // The cell the server told everyone (uoTree): others see me only there.
-                $"my cell for others {Bot.Map.Players.Find(p => string.Equals(p.Name, Bot.Player.Username, StringComparison.OrdinalIgnoreCase))?.Cell ?? "(not listed)"}";
+                $"players in room {Bot.Map.PlayerCount}, " + Visibility(f);
         }
         catch (Exception e)
         {
             return $"World check failed: {e.Message}";
+        }
+    }
+
+    // The cell the server knows me in (my dataLeaf): others see me only there.
+    private static string Visibility(Skua.Core.Interfaces.IFlashUtil f)
+    {
+        try
+        {
+            Newtonsoft.Json.Linq.JObject? tree = f.GetGameObject<Newtonsoft.Json.Linq.JObject>("world.uoTree");
+            Newtonsoft.Json.Linq.JObject? me = f.GetGameObject<Newtonsoft.Json.Linq.JObject>("world.myAvatar.dataLeaf");
+            string myFrame = me?.Value<string>("strFrame") ?? "?";
+            int here = tree?.Properties().Count(p => p.Value is Newtonsoft.Json.Linq.JObject o && o.Value<string>("strFrame") == myFrame) ?? -1;
+            return $"listed players {tree?.Count ?? -1}, my cell for others {myFrame}, players there {here}";
+        }
+        catch (Exception e)
+        {
+            return $"visibility check failed: {e.Message}";
         }
     }
 

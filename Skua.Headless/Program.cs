@@ -497,12 +497,13 @@ async Task<int> Lab()
             Username = Environment.GetEnvironmentVariable("SKUA_E2E_USER") ?? "",
             Password = Environment.GetEnvironmentVariable("SKUA_E2E_PASS") ?? "",
             Server = Arg("--server", "Twilly"),
-            Script = script,
+            Script = script == "none" ? "" : script,
             AutoLogin = true,
-            AutoStart = true,
+            AutoStart = script != "none",
         }),
     }, 10 * 60 * 1000);
     await bot.SendAsync("headless.start", null, 60000);
+    string join = Arg("--join");
     var sw = Stopwatch.StartNew();
     long seq = 0;
     while (sw.Elapsed.TotalSeconds < seconds)
@@ -516,6 +517,12 @@ async Task<int> Lab()
             foreach (var line in logs?["lines"] ?? new Newtonsoft.Json.Linq.JArray())
                 Console.WriteLine($"BOT {line}");
             seq = logs?.Value<long?>("seq") ?? seq;
+            if (join.Length > 0 && status?.Value<bool?>("playing") == true)
+            {
+                Console.WriteLine($"LAB joining {join}");
+                await bot.SendAsync("join", new Newtonsoft.Json.Linq.JObject { ["map"] = join }, 60000);
+                join = "";
+            }
             if ((int)sw.Elapsed.TotalSeconds % 30 < 10)
                 Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s {await bot.SendAsync("worldCheck")}");
         }
