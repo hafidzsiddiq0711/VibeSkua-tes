@@ -17,6 +17,48 @@ public sealed class BotState
     public DateTime LastSeenUtc { get; set; } = DateTime.UtcNow;
     public string? Error { get; set; }
 
+    // ------------------------------------------------------------------ farming rate
+
+    private readonly List<(DateTime At, long Xp, long Gold)> _samples = new();
+    private long _totalXp;
+    private int _lastLevel = -1, _lastXp, _lastNeeded;
+
+    /// <summary>Feed a status: keeps XP gained (across level-ups) and gold over the last 15 minutes.</summary>
+    public void Sample(JObject s)
+    {
+        if (s.Value<bool?>("playing") != true || s.Value<int?>("level") is not int level || s.Value<int?>("xp") is not int xp)
+            return;
+        if (_lastLevel >= 0)
+        {
+            if (level == _lastLevel && xp >= _lastXp)
+                _totalXp += xp - _lastXp;
+            else if (level == _lastLevel + 1)
+                _totalXp += Math.Max(0, _lastNeeded - _lastXp) + xp;
+        }
+        _lastLevel = level;
+        _lastXp = xp;
+        _lastNeeded = s.Value<int?>("xpNeeded") ?? 0;
+        DateTime now = DateTime.UtcNow;
+        _samples.Add((now, _totalXp, s.Value<long?>("gold") ?? 0));
+        _samples.RemoveAll(x => now - x.At > TimeSpan.FromMinutes(15));
+    }
+
+    /// <summary>"+480k XP/h · +3.5k gold/h" once there are 2 minutes of samples; "" before.</summary>
+    public string Rate()
+    {
+        if (_samples.Count < 2)
+            return "";
+        var (t0, x0, g0) = _samples[0];
+        var (t1, x1, g1) = _samples[^1];
+        double hours = (t1 - t0).TotalHours;
+        if (hours < 2 / 60.0)
+            return "";
+        return $"+{Short((x1 - x0) / hours)} XP/h · {(g1 >= g0 ? "+" : "")}{Short((g1 - g0) / hours)} gold/h";
+    }
+
+    private static string Short(double v) =>
+        Math.Abs(v) >= 1e6 ? $"{v / 1e6:0.#}M" : Math.Abs(v) >= 1e3 ? $"{v / 1e3:0.#}k" : $"{v:0}";
+
     public string Describe()
     {
         if (!Alive)
@@ -154,6 +196,7 @@ public static class BotHub
             BotClient client = ClientFor(account, slot);
             JObject status = (JObject)(await client.SendAsync("status", null, account.Remote ? 15000 : 4000))!;
             state.Status = status;
+            state.Sample(status);
             state.Alive = true;
             state.Error = null;
             state.LastSeenUtc = DateTime.UtcNow;

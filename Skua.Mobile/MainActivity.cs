@@ -291,6 +291,9 @@ public class MainActivity : Activity
                 meta.Add($"{account.RenderScale}% res");
             if (alive && state!.Status.Value<long?>("memMb") is long mb)
                 meta.Add($"bot {mb} MB");
+            // Is it really farming? XP and gold per hour over the last minutes.
+            if (alive && state!.Rate() is { Length: > 0 } rate)
+                meta.Add(rate);
             views.Meta.Text = string.Join("  ·  ", meta);
             string last = alive ? state!.Status.Value<string>("lastLog") ?? "" : "";
             // "04:11:50 [04:11:50] (SetOptions) Bot Started" -> "04:11:50 (SetOptions) Bot Started"
