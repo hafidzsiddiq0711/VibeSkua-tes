@@ -359,6 +359,15 @@ async Task<int> EndToEnd()
             {
                 await Task.Delay(5000);
                 Console.WriteLine($"in game: map {host.Bot.Map.Name}, level {host.Bot.Player.Level}, cell {host.Bot.Player.Cell}");
+                await Task.Delay(10000);
+                string check1 = host.WorldCheck();
+                Console.WriteLine(check1);
+                Console.WriteLine($"::notice title=e2e world (login)::{check1}");
+                host.Bot.Map.Join("battleon");
+                await Task.Delay(15000);
+                string check2 = host.WorldCheck();
+                Console.WriteLine(check2);
+                Console.WriteLine($"::notice title=e2e world (battleon)::{check2}");
             }
             Console.WriteLine(playing ? "E2E LOGIN OK" : "E2E LOGIN FAILED");
             ok &= playing;

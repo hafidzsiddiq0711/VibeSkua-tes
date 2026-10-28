@@ -157,6 +157,13 @@ public static class BotHub
             state.Error = null;
             state.LastSeenUtc = DateTime.UtcNow;
             long seq = status.Value<long?>("logSeq") ?? 0;
+            // A new bot process (restarted, or the account moved) counts its log from zero again.
+            if (seq < state.LogSeq)
+            {
+                state.LogSeq = 0;
+                lock (state.Log)
+                    state.Log.Add("───── bot restarted ─────");
+            }
             if (seq > state.LogSeq)
             {
                 JToken? logs = await client.SendAsync("logs", new JObject { ["since"] = state.LogSeq }, 8000);
@@ -322,6 +329,15 @@ public static class BotHub
         if (SlotOf(account) is not int slot)
             throw new InvalidOperationException("This account's bot isn't running.");
         return ClientFor(account, slot).SendAsync(cmd, args, account.Remote ? Math.Max(timeoutMs, 30000) : timeoutMs);
+    }
+
+    /// <summary>The server's file log of this account's bot (game output included).</summary>
+    public static async Task<string> ServerLogAsync(Account account)
+    {
+        int slot = SlotOf(account) ?? -1;
+        using BotClient client = new(ServerStore.Find(account.ServerId)?.Host ?? throw new InvalidOperationException("This account's server was removed."),
+            ServerStore.Find(account.ServerId)!.Port, ServerStore.Find(account.ServerId)!.Token, slot);
+        return (await client.SendAsync("server.botLog", null, 20000))?.ToString() ?? "";
     }
 
     public static async Task ShutdownAsync(Account account)

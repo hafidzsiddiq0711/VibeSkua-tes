@@ -307,6 +307,27 @@ public sealed class SkuaHost : IDisposable
     /// <summary>Compile a script source without running it (self-test of the compiler setup).</summary>
     public object? CompileOnly(string source) => Manager.Compile(source);
 
+    /// <summary>
+    /// What scripts wait for before they run (Player.Loaded): inventory loaded, no map loading,
+    /// avatar art loaded. A bot whose script "does nothing" usually fails one of these.
+    /// </summary>
+    public string WorldCheck()
+    {
+        try
+        {
+            var f = Bot.Flash;
+            return $"World check: map {Bot.Map.Name}, cell {f.GetGameObject<string>("world.strFrame")} / {f.GetGameObject<string>("world.strPad")}, " +
+                $"items {f.GetGameObject<int>("world.myAvatar.items.length")}, map loading {f.GetGameObject<bool>("world.mapLoadInProgress")}, " +
+                $"avatar art loaded {f.CallGameFunction<bool>("world.myAvatar.pMC.artLoaded")}, player loaded {Bot.Player.Loaded}";
+        }
+        catch (Exception e)
+        {
+            return $"World check failed: {e.Message}";
+        }
+    }
+
+    public void Report(string text) => Say(text);
+
     private void Say(string text)
     {
         Trace.WriteLine(text);

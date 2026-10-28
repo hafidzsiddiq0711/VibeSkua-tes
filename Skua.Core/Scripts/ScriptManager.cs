@@ -148,7 +148,10 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
             UnloadPreviousScript();
 
             string scriptContent = ScriptPlatformCompat.ReadScript(LoadedScript);
+            _logger.ScriptLog($"Compiling {Path.GetFileName(LoadedScript)} …");
+            Stopwatch compileTime = Stopwatch.StartNew();
             object? script = await Task.Run(() => Compile(scriptContent));
+            _logger.ScriptLog($"Compiled in {compileTime.Elapsed.TotalSeconds:F0} s, running.");
 
             LoadScriptConfig(script);
 
@@ -201,6 +204,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
                     if ((actualException is not OperationCanceledException || !stoppedByScript) && (e is not TargetInvocationException || !stoppedByScript))
                     {
                         exception = e;
+                        _logger.ScriptLog($"Script error: {actualException.GetType().Name}: {actualException.Message}");
                         Trace.WriteLine($"Error while running script:\r\nMessage: {(e.InnerException is not null ? e.InnerException.Message : e.Message)}\r\nStackTrace: {(e.InnerException is not null ? e.InnerException.StackTrace : e.StackTrace)}");
 
                         StrongReferenceMessenger.Default.Send<ScriptErrorMessage, int>(new(e), (int)MessageChannels.ScriptStatus);

@@ -52,6 +52,7 @@ public sealed class BotController : IDisposable
     private int _autopilotRunning;
     // Auto start runs once per game load, so a script stopped by hand stays stopped.
     private volatile bool _autoStartDone;
+    private volatile bool _worldChecked;
 
     /// <summary>Headless player for this platform (null: not available).</summary>
     public IHeadlessGame? Headless { get; set; }
@@ -67,6 +68,7 @@ public sealed class BotController : IDisposable
         host.GameReady += () =>
         {
             _autoStartDone = false;
+            _worldChecked = false;
             _ = AutopilotAsync("game ready");
         };
     }
@@ -108,7 +110,18 @@ public sealed class BotController : IDisposable
                     return;
             }
             if (_host.Bot.Player.Playing)
+            {
                 ApplySkuaOptions(p.SkuaOptions);
+                if (!_worldChecked)
+                {
+                    _worldChecked = true;
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(15000);
+                        _host.Report(_host.WorldCheck());
+                    });
+                }
+            }
             if (p.AutoStart && !_autoStartDone && p.Script.Length > 0 && _host.Bot.Player.Playing && !_host.Manager.ScriptRunning)
             {
                 _autoStartDone = true;

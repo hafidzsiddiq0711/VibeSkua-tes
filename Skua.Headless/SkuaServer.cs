@@ -162,6 +162,24 @@ sealed class SkuaServer : IDisposable
                     ["maxSlots"] = _config.MaxSlots,
                     ["running"] = new JArray(_bots.Where(kv => !kv.Value.HasExited).Select(kv => (object)kv.Key).OrderBy(s => s).ToArray()),
                 };
+            case "server.botLog":
+            {
+                // The bot's whole output (game included), for when its own log is gone or empty.
+                int slot = req.Value<int?>("slot") ?? -1;
+                string? file = slot >= 0 ? Path.Combine(_logDir, $"bot{slot}.log") : null;
+                if (file is null || !File.Exists(file))
+                    file = new DirectoryInfo(_logDir).GetFiles("bot*.log").OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault()?.FullName;
+                if (file is null)
+                    return "(no bot has run yet)";
+                using FileStream fs = new(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                if (fs.Length > 256 * 1024)
+                    fs.Seek(-256 * 1024, SeekOrigin.End);
+                using StreamReader reader = new(fs, new UTF8Encoding(false));
+                // Stack traces of the game's own script errors are long and say little; keep their first line.
+                List<string> lines = reader.ReadToEnd().Split('\n').Select(l => l.TrimEnd('\r'))
+                    .Where(l => !l.TrimStart().StartsWith("at ", StringComparison.Ordinal)).ToList();
+                return $"{Path.GetFileName(file)}\n" + string.Join("\n", lines.TakeLast(400));
+            }
             case "server.stopBot":
             {
                 int slot = req.Value<int?>("slot") ?? -1;
@@ -231,6 +249,14 @@ sealed class SkuaServer : IDisposable
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             _bots[slot] = process;
+            process.EnableRaisingEvents = true;
+            process.Exited += (_, _) =>
+            {
+                string text = $"bot {slot} exited (code {SafeExitCode(process)})";
+                Log(text);
+                lock (log)
+                    log.WriteLine($"===== {DateTime.Now:yyyy-MM-dd HH:mm:ss} {text} =====");
+            };
             Log($"bot {slot} starting (pid {process.Id})");
 
             Stopwatch sw = Stopwatch.StartNew();
@@ -251,6 +277,11 @@ sealed class SkuaServer : IDisposable
         {
             gate.Release();
         }
+    }
+
+    private static string SafeExitCode(Process process)
+    {
+        try { return process.ExitCode.ToString(); } catch { return "?"; }
     }
 
     private static void Log(string text) => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {text}");

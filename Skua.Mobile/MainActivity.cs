@@ -420,11 +420,18 @@ public class MainActivity : Activity
             ("Script options", () => ScriptOptions(account)),
             ("Log in again", () => Send(account, "login", "Logged in.", 120000)),
             ("Bot log", () => ShowBotLog(account)),
+            ("Server log (full, incl. game)", () => Run(async () =>
+            {
+                string text = await BotHub.ServerLogAsync(account);
+                _ui.Post(() => ShowText($"Server log · {account.Title}", text));
+            }, "Server log")),
             ("Stop bot", () => Run(async () => await BotHub.ShutdownAsync(account), "Stop bot")),
             ("Move up", () => AccountStore.Move(account.Id, -1)),
             ("Move down", () => AccountStore.Move(account.Id, 1)),
             ("Delete account", () => ConfirmDelete(account)),
         };
+        if (!account.Remote)
+            items = items.Where(i => !i.Label.StartsWith("Server log", StringComparison.Ordinal)).ToArray();
         Ui.Dialog(this, account.Title)
             .SetItems(items.Select(i => i.Label).ToArray(), (_, e) => items[e.Which].Action())!
             .SetNegativeButton("Close", (_, _) => { })!
