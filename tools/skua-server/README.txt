@@ -16,8 +16,13 @@ Setup (once)
 5. Edit an account -> "Runs on" -> this server. Press Play.
 
 Notes
-- Scripts, options and CoreBots settings are shared with VibeSkua on this PC
-  (%APPDATA%\VibeSkua). Use "Update scripts" from the phone or VibeSkua as usual.
+- The bots keep their own Skua folder: data\ next to this file (scripts, options,
+  CoreBots settings), apart from VibeSkua desktop's %APPDATA%\VibeSkua, so both can
+  run on this PC side by side. On first start the server copies your CoreBots
+  options from VibeSkua and downloads the scripts. Use "Update scripts" from the
+  phone to refresh them. (server.json "DataDir": "" shares VibeSkua's folder again.)
+- If a bot won't start or its script does nothing: Skua Mobile -> account menu ->
+  Server log. Look for "World check" and "Script error" lines.
 - Logs: the logs folder next to this file (one file per bot).
 - Settings: server.json (port, max bots, token). Delete the token line to make a new one.
 - Keep the token private: with it, anyone who can reach this port controls the bots.

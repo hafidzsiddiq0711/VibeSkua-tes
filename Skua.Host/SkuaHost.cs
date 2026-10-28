@@ -332,11 +332,8 @@ public sealed class SkuaHost : IDisposable
     {
         try
         {
-            Newtonsoft.Json.Linq.JObject? tree = f.GetGameObject<Newtonsoft.Json.Linq.JObject>("world.uoTree");
             Newtonsoft.Json.Linq.JObject? me = f.GetGameObject<Newtonsoft.Json.Linq.JObject>("world.myAvatar.dataLeaf");
-            string myFrame = me?.Value<string>("strFrame") ?? "?";
-            int here = tree?.Properties().Count(p => p.Value is Newtonsoft.Json.Linq.JObject o && o.Value<string>("strFrame") == myFrame) ?? -1;
-            return $"listed players {tree?.Count ?? -1}, my cell for others {myFrame}, players there {here}";
+            return $"my cell for others {me?.Value<string>("strFrame") ?? "?"}";
         }
         catch (Exception e)
         {
