@@ -63,7 +63,10 @@ jobs:
           lines = open("lab.log", encoding="utf-8", errors="replace").read().splitlines() if os.path.exists("lab.log") else []
           keep = [l for l in lines if not l.lstrip().startswith("at ") and "Encountered stub" not in l and "Unknown device font" not in l]
           keep = [l for l in keep if "Downloading" not in l and "Downloaded" not in l and "Data Collection" not in l]
-          chunks = [keep[i:i+70] for i in range(0, len(keep), 70)][-9:]
+          # GitHub keeps 10 annotations per step: the important lines first, then the end of the log.
+          key = [l for l in keep if "LAB CPU" in l or "Compiled in" in l or "World check" in l][-40:]
+          print("::notice title=lab key::" + "\n".join(key).replace("%", "%25").replace("\n", "%0A"))
+          chunks = [keep[i:i+70] for i in range(0, len(keep), 70)][-8:]
           for n, c in enumerate(chunks):
               print(f"::notice title=lab {n}::" + "\n".join(c).replace("%", "%25").replace("\n", "%0A"))
           PY
@@ -117,7 +120,10 @@ jobs:
           keep = [l for l in lines if not l.lstrip().startswith("at ") and "Encountered stub" not in l and "Unknown device font" not in l]
           # skip the script download progress spam
           keep = [l for l in keep if "Downloading" not in l and "Downloaded" not in l]
-          chunks = [keep[i:i+70] for i in range(0, len(keep), 70)][-9:]
+          # GitHub keeps 10 annotations per step: the important lines first, then the end of the log.
+          key = [l for l in keep if "LAB CPU" in l or "Compiled in" in l or "World check" in l][-40:]
+          print("::notice title=lab key::" + "\n".join(key).replace("%", "%25").replace("\n", "%0A"))
+          chunks = [keep[i:i+70] for i in range(0, len(keep), 70)][-8:]
           for n, c in enumerate(chunks):
               print(f"::notice title=lab {n}::" + "\n".join(c).replace("%", "%25").replace("\n", "%0A"))
           PY

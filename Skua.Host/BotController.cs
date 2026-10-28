@@ -56,6 +56,9 @@ public sealed class BotController : IDisposable
     // Tells the manager that a new bot process answers now (its log counts from zero again).
     private readonly string _instance = Guid.NewGuid().ToString("N")[..8];
 
+    /// <summary>Frame rate of a headless game unless the account sets one (AQW itself runs at 24-30).</summary>
+    public static int HeadlessFps { get; set; } = 12;
+
     /// <summary>Headless player for this platform (null: not available).</summary>
     public IHeadlessGame? Headless { get; set; }
 
@@ -113,7 +116,12 @@ public sealed class BotController : IDisposable
             }
             if (_host.Bot.Player.Playing)
             {
-                ApplySkuaOptions(p.SkuaOptions);
+                // Headless nobody watches the game: fewer frames, much less CPU (the game's own
+                // logic runs every frame). An FPS chosen for the account wins.
+                Dictionary<string, string> options = new(p.SkuaOptions);
+                if (Headless?.Running == true && !options.ContainsKey("SetFPS"))
+                    options["SetFPS"] = HeadlessFps.ToString();
+                ApplySkuaOptions(options);
                 if (!_worldChecked)
                 {
                     _worldChecked = true;
