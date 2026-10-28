@@ -28,7 +28,7 @@ public class MainActivity : Activity
     private string _group = AllGroups;
     private bool _visible;
 
-    private sealed record CardViews(View Accent, TextView Avatar, TextView Status, TextView Meta, TextView ModeChip, Android.Widget.Button ModeButton);
+    private sealed record CardViews(View Accent, TextView Avatar, TextView Status, TextView Meta, TextView Activity, TextView ModeChip, Android.Widget.Button ModeButton);
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -241,8 +241,15 @@ public class MainActivity : Activity
         status.SetPadding(0, Ui.Dp(this, 10), 0, 0);
         body.AddView(status);
         TextView meta = Ui.Label(this, "", 12, Ui.Muted);
-        meta.SetPadding(0, Ui.Dp(this, 2), 0, Ui.Dp(this, 6));
+        meta.SetPadding(0, Ui.Dp(this, 2), 0, 0);
         body.AddView(meta);
+        // The bot's latest log line: what it is doing right now.
+        TextView activity = Ui.Label(this, "", 11, Ui.Muted);
+        activity.SetTypeface(Typeface.Monospace, TypefaceStyle.Normal);
+        activity.SetMaxLines(2);
+        activity.Ellipsize = TextUtils.TruncateAt.End;
+        activity.SetPadding(0, Ui.Dp(this, 4), 0, Ui.Dp(this, 6));
+        body.AddView(activity);
 
         Android.Widget.Button modeButton = Ui.Button(this, "", () => ModeButton(account), sp: 12);
         LinearLayout buttons = Ui.Row(this,
@@ -252,7 +259,7 @@ public class MainActivity : Activity
             Ui.Button(this, "⋯", () => AccountMenu(account), sp: 15));
         body.AddView(buttons, Ui.Margins(this, ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, -3, 0, -3, 0));
 
-        _cards[account.Id] = new CardViews(accent, avatar, status, meta, modeChip, modeButton);
+        _cards[account.Id] = new CardViews(accent, avatar, status, meta, activity, modeChip, modeButton);
         return card;
     }
 
@@ -285,6 +292,11 @@ public class MainActivity : Activity
             if (alive && state!.Status.Value<long?>("memMb") is long mb)
                 meta.Add($"bot {mb} MB");
             views.Meta.Text = string.Join("  ·  ", meta);
+            string last = alive ? state!.Status.Value<string>("lastLog") ?? "" : "";
+            // "04:11:50 [04:11:50] (SetOptions) Bot Started" -> "04:11:50 (SetOptions) Bot Started"
+            last = System.Text.RegularExpressions.Regex.Replace(last, @"^(\d\d:\d\d:\d\d) \[\d\d:\d\d:\d\d\] ", "$1 ").Replace('\n', ' ');
+            views.Activity.Text = last;
+            views.Activity.Visibility = last.Length > 0 ? ViewStates.Visible : ViewStates.Gone;
 
             if (account.Remote)
             {

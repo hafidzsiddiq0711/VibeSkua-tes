@@ -553,6 +553,10 @@ async Task<int> Lab()
             Console.WriteLine($"LAB {sw.Elapsed.TotalSeconds:F0}s error: {e.Message}");
         }
     }
+    // CPU use of the bot and its game over the run (a bot should idle near 0, a game ~ a few %).
+    foreach (string name in new[] { "skua-headless", "skua-ruffle", "dotnet" })
+        foreach (Process p in Process.GetProcessesByName(name))
+            try { Console.WriteLine($"LAB CPU {name} pid {p.Id}: {p.TotalProcessorTime.TotalSeconds:F0} s CPU in {(DateTime.Now - p.StartTime).TotalSeconds:F0} s, {p.WorkingSet64 / (1024 * 1024)} MB"); } catch { }
     try { await bot.SendAsync("stop", null, 30000); } catch (Exception e) { Console.WriteLine($"LAB stop: {e.Message}"); }
     try { await bot.SendAsync("shutdown", null, 15000); } catch { }
     string file = Path.Combine(logDir, "bot1.log");

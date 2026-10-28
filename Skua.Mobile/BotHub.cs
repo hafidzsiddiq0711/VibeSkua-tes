@@ -13,6 +13,7 @@ public sealed class BotState
     public JObject Status { get; set; } = new();
     public List<string> Log { get; } = new();
     public long LogSeq { get; set; }
+    public string Instance { get; set; } = "";
     public DateTime LastSeenUtc { get; set; } = DateTime.UtcNow;
     public string? Error { get; set; }
 
@@ -151,18 +152,21 @@ public static class BotHub
         try
         {
             BotClient client = ClientFor(account, slot);
-            JObject status = (JObject)(await client.SendAsync("status", null, account.Remote ? 8000 : 4000))!;
+            JObject status = (JObject)(await client.SendAsync("status", null, account.Remote ? 15000 : 4000))!;
             state.Status = status;
             state.Alive = true;
             state.Error = null;
             state.LastSeenUtc = DateTime.UtcNow;
             long seq = status.Value<long?>("logSeq") ?? 0;
             // A new bot process (restarted, or the account moved) counts its log from zero again.
-            if (seq < state.LogSeq)
+            string instance = status.Value<string>("instance") ?? "";
+            if (instance != state.Instance)
             {
+                if (state.Instance.Length > 0)
+                    lock (state.Log)
+                        state.Log.Add("───── bot restarted ─────");
+                state.Instance = instance;
                 state.LogSeq = 0;
-                lock (state.Log)
-                    state.Log.Add("───── bot restarted ─────");
             }
             if (seq > state.LogSeq)
             {

@@ -53,6 +53,8 @@ public sealed class BotController : IDisposable
     // Auto start runs once per game load, so a script stopped by hand stays stopped.
     private volatile bool _autoStartDone;
     private volatile bool _worldChecked;
+    // Tells the manager that a new bot process answers now (its log counts from zero again).
+    private readonly string _instance = Guid.NewGuid().ToString("N")[..8];
 
     /// <summary>Headless player for this platform (null: not available).</summary>
     public IHeadlessGame? Headless { get; set; }
@@ -297,7 +299,11 @@ public sealed class BotController : IDisposable
                 }
                 catch { }
                 lock (_log)
+                {
                     s["logSeq"] = _seq;
+                    s["lastLog"] = _log.Count > 0 ? _log[^1].Text : "";
+                }
+                s["instance"] = _instance;
                 _status = s;
                 try { await Task.Delay(2000, _cts.Token); } catch { }
             }
@@ -420,6 +426,14 @@ public sealed class BotController : IDisposable
                 if (script.Length == 0)
                     throw new InvalidOperationException("No script chosen.");
                 _profile.Script = script;
+                // Pressing Start again while it runs (or compiles) must not restart it from scratch.
+                if (_host.Manager.ScriptRunning && _host.Manager.LoadedScript is { } loaded
+                    && string.Equals(Path.GetFullPath(loaded), Path.GetFullPath(ScriptPath(script)), StringComparison.OrdinalIgnoreCase)
+                    && req.Value<bool?>("restart") != true)
+                {
+                    AddLog($"{Path.GetFileName(loaded)} is already running.");
+                    return null;
+                }
                 Exception? error = await _host.StartScriptAsync(ScriptPath(script));
                 if (error is not null)
                     throw error;

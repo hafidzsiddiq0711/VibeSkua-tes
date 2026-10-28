@@ -212,10 +212,16 @@ sealed class SkuaServer : IDisposable
             throw new InvalidOperationException($"This server runs slots 0-{_config.MaxSlots}.");
 
         BotClient client = _clients.GetOrAdd(slot, s => new BotClient(s));
-        if (!Running(slot) || !await client.PingAsync(1500))
+        if (PollOnly.Contains(cmd))
         {
-            if (PollOnly.Contains(cmd))
+            // A busy bot (compiling a script on a loaded PC) answers slowly: it's only "not running"
+            // when its process is gone.
+            if (!Running(slot))
                 throw new InvalidOperationException("Bot isn't running.");
+        }
+        else if (!Running(slot))
+        {
+            // Never replace a living bot because it answers slowly; "Stop bot" ends a stuck one.
             await SpawnAsync(slot, client);
         }
 
@@ -237,7 +243,7 @@ sealed class SkuaServer : IDisposable
         await gate.WaitAsync();
         try
         {
-            if (Running(slot) && await client.PingAsync(1500))
+            if (Running(slot))
                 return;
             if (_bots.TryRemove(slot, out Process? old))
                 try { old.Kill(true); } catch { }
